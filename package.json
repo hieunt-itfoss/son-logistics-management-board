@@ -1,0 +1,25 @@
+{
+  "name": "he-thong-quan-ly",
+  "version": "1.0.0",
+  "description": "He thong quan ly van tai - Transport Management System",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "db:seed": "wrangler d1 execute DB --local --file=src/db/seed.sql",
+    "types": "wrangler types",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.12.21"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260520.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6",
+    "wrangler": "^4.93.0"
+  }
+}

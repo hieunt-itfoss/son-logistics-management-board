@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "he-thong-quan-ly",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "he-thong-quan-ly-db",
+      "database_id": "318a4323-03b2-4c1e-bc77-c58b4faecceb",
+      "migrations_dir": "src/db/migrations"
+    }
+  ],
+  "vars": {
+    "APP_NAME": "Hệ thống quản lý vận tải",
+    "SESSION_SECRET": "change-me-in-production-use-wrangler-secret"
+  }
+}
