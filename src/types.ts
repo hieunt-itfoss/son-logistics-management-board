@@ -80,6 +80,50 @@ export interface ChuyenXe {
   ghi_chu: string;
 }
 
+export interface LoHang {
+  id: string;
+  chuyen_xe_id: string;
+  khach_hang_id: string;
+  hang_id: string;
+  so_kien: number;
+  da_tra_hang: number;
+  ly_do_thieu: string;
+  don_gia: number;
+  tien_te: string;
+  thanh_tien: number;
+  so_tien_hang: number;
+  giam_gia: number;
+  nguoi_tao: string;
+  nguoi_thu: string;
+}
+
+export interface PhieuThu {
+  id: string;
+  ngay: string;
+  khach_hang_id: string;
+  dau_muc: string;
+  kieu_qt: 'trahet' | 'ung';
+  loai_tien: string;
+  lo_ids: string;
+  so_tien: number;
+  tien_te: string;
+  hinh_thuc: 'TM' | 'CK';
+  ghi_chu: string;
+  nguoi_nhap: string;
+  gio: string;
+}
+
+export interface PhieuChi {
+  id: string;
+  ngay: string;
+  dau_muc: string;
+  so_tien: number;
+  tien_te: string;
+  hinh_thuc: 'TM' | 'CK';
+  ghi_chu: string;
+  nguoi_nhap: string;
+}
+
 declare module 'hono' {
   interface ContextVariableMap {
     user: User;
