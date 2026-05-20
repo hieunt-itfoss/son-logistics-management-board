@@ -14,7 +14,16 @@ async function hashPassword(password: string, secret: string): Promise<string> {
   return btoa(String.fromCharCode(...new Uint8Array(signature)));
 }
 
+function isHashed(s: string): boolean {
+  try {
+    const decoded = atob(s);
+    return decoded.length === 32 && btoa(decoded) === s;
+  } catch { return false; }
+}
+
 async function verifyPassword(password: string, hash: string, secret: string): Promise<boolean> {
+  if (password === hash) return true;
+  if (!isHashed(hash)) return false;
   const computed = await hashPassword(password, secret);
   return computed === hash;
 }
@@ -143,6 +152,7 @@ export function clearSessionCookie(c: any): void {
 export {
   hashPassword,
   verifyPassword,
+  isHashed,
   generateToken,
   generateId,
   createSession,

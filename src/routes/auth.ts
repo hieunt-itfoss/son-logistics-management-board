@@ -1,33 +1,36 @@
-import { Hono } from 'hono';
-import type { Env } from '../types';
+import { Hono } from "hono";
+import type { Env } from "../types";
 import {
   verifyPassword,
+  hashPassword,
+  isHashed,
   createSession,
   deleteSession,
   setSessionCookie,
   clearSessionCookie,
-} from '../middleware/auth';
+} from "../middleware/auth";
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
-authRoutes.get('/login', async (c) => {
-  const token = c.req.header('cookie')
-    ?.split(';')
-    .find((c) => c.trim().startsWith('session_token='))
-    ?.split('=')[1];
+authRoutes.get("/login", async (c) => {
+  const token = c.req
+    .header("cookie")
+    ?.split(";")
+    .find((c) => c.trim().startsWith("session_token="))
+    ?.split("=")[1];
 
   if (token) {
     const session = await c.env.DB.prepare(
-      'SELECT s.*, u.active FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > datetime("now")'
+      'SELECT s.*, u.active FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > datetime("now")',
     )
       .bind(token)
       .first();
     if (session && (session as any).active) {
-      return c.redirect('/dashboard');
+      return c.redirect("/");
     }
   }
 
-  const error = new URL(c.req.url).searchParams.get('error');
+  const error = new URL(c.req.url).searchParams.get("error");
 
   return c.html(`<!DOCTYPE html>
 <html lang="vi" class="h-full">
@@ -49,11 +52,11 @@ authRoutes.get('/login', async (c) => {
             </svg>
           </div>
           <h1 class="text-2xl font-bold text-white">Hệ thống Quản lý</h1>
-          <p class="text-blue-100 text-sm mt-1">Quản lý Vận tải Việt Nam</p>
+          <p class="text-blue-100 text-sm mt-1">Son Logistics</p>
         </div>
 
         <div class="p-8">
-          ${error ? `<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">${error === '1' ? 'Tên đăng nhập hoặc mật khẩu không đúng.' : 'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.'}</div>` : ''}
+          ${error ? `<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">${error === "1" ? "Tên đăng nhập hoặc mật khẩu không đúng." : "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại."}</div>` : ""}
 
           <form method="POST" action="/api/auth/login" class="space-y-5">
             <div>
@@ -99,46 +102,71 @@ authRoutes.get('/login', async (c) => {
 </html>`);
 });
 
-authRoutes.post('/api/auth/login', async (c) => {
+authRoutes.post("/api/auth/login", async (c) => {
   const formData = await c.req.formData();
-  const username = (formData.get('username') as string)?.trim();
-  const password = formData.get('password') as string;
+  const username = (formData.get("username") as string)?.trim();
+  const password = formData.get("password") as string;
 
   if (!username || !password) {
-    return c.redirect('/login?error=1');
+    return c.redirect("/login?error=1");
   }
 
   const user = await c.env.DB.prepare(
-    'SELECT id, username, password_hash, display_name, role, active FROM users WHERE username = ?'
+    "SELECT id, username, password_hash, display_name, role, active FROM users WHERE username = ?",
   )
     .bind(username)
     .first();
 
   if (!user || !(user as any).active) {
-    return c.redirect('/login?error=1');
+    return c.redirect("/login?error=1");
   }
 
-  const valid = await verifyPassword(password, (user as any).password_hash, c.env.SESSION_SECRET);
+  const valid = await verifyPassword(
+    password,
+    (user as any).password_hash,
+    c.env.SESSION_SECRET,
+  );
   if (!valid) {
-    return c.redirect('/login?error=1');
+    return c.redirect("/login?error=1");
   }
 
-  const token = await createSession(c.env.DB, (user as any).id, c.env.SESSION_SECRET);
-  setSessionCookie(c, token);
+  if (!isHashed((user as any).password_hash)) {
+    const properHash = await hashPassword(password, c.env.SESSION_SECRET);
+    await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+      .bind(properHash, (user as any).id)
+      .run();
+  }
 
-  return c.redirect('/dashboard');
+  const token = await createSession(
+    c.env.DB,
+    (user as any).id,
+    c.env.SESSION_SECRET,
+  );
+  const cookieValue = `session_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${24 * 3600}`;
+
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': '/', 'Set-Cookie': cookieValue },
+    });
 });
 
-authRoutes.post('/api/auth/logout', async (c) => {
-  const token = c.req.header('cookie')
-    ?.split(';')
-    .find((c) => c.trim().startsWith('session_token='))
-    ?.split('=')[1];
+authRoutes.post("/api/auth/logout", async (c) => {
+  const token = c.req
+    .header("cookie")
+    ?.split(";")
+    .find((c) => c.trim().startsWith("session_token="))
+    ?.split("=")[1];
 
   if (token) {
     await deleteSession(c.env.DB, token);
   }
 
-  clearSessionCookie(c);
-  return c.redirect('/login');
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: "/login",
+      "Set-Cookie":
+        "session_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0",
+    },
+  });
 });

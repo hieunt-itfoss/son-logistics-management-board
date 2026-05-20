@@ -20,12 +20,12 @@ const protectedApp = new Hono<{ Bindings: Env }>();
 protectedApp.use('*', authMiddleware);
 
 protectedApp.route('/', dashboardRoutes);
-protectedApp.route('/', khachHangRoutes);
-protectedApp.route('/', hangRoutes);
-protectedApp.route('/', tuyenRoutes);
-protectedApp.route('/', xeRoutes);
-protectedApp.route('/', taiXeRoutes);
-protectedApp.route('/', chuyenXeRoutes);
+protectedApp.route('/khach-hang', khachHangRoutes);
+protectedApp.route('/hang', hangRoutes);
+protectedApp.route('/tuyen', tuyenRoutes);
+protectedApp.route('/xe', xeRoutes);
+protectedApp.route('/tai-xe', taiXeRoutes);
+protectedApp.route('/chuyen-xe', chuyenXeRoutes);
 
 app.route('/', protectedApp);
 
