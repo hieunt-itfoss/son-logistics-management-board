@@ -1,187 +1,359 @@
 import { Hono } from 'hono';
-import type { Env, Tuyen } from '../types';
+import type { Env, Tuyen, DauMucGroup } from '../types';
+import { DM_GROUP_LABEL, DM_GROUP_TIENTO } from '../types';
+import { layout } from '../utils/layout';
+import {
+  pageHeader,
+  card,
+  dataTable,
+  tableRow,
+  tableEmpty,
+  tableActions,
+  btnPrimary,
+  btnSecondary,
+  formGroup,
+  input,
+  select,
+} from '../utils/ui';
 
 export const tuyenRoutes = new Hono<{ Bindings: Env }>();
 
-function layout(title: string, content: string, user: any): string {
-  return `<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} - HTQLVT</title>
-  <link rel="stylesheet" href="/assets/tailwind/tailwind.css">
-  <link rel="stylesheet" href="/assets/css/theme.css">
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <nav class="bg-white shadow-sm border-b border-gray-200">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16">
-        <div class="flex items-center">
-          <a href="/dashboard" class="text-xl font-bold text-blue-700">HTQLVT</a>
-          <span class="ml-4 text-gray-400">|</span>
-          <a href="/khach-hang" class="ml-4 text-gray-600 hover:text-gray-900">Khách hàng</a>
-          <a href="/hang" class="ml-4 text-gray-600 hover:text-gray-900">Hãng</a>
-          <a href="/tuyen" class="ml-4 text-blue-700 font-semibold">Tuyến</a>
-          <a href="/xe" class="ml-4 text-gray-600 hover:text-gray-900">Xe</a>
-          <a href="/tai-xe" class="ml-4 text-gray-600 hover:text-gray-900">Tài xế</a>
-          <a href="/chuyen-xe" class="ml-4 text-gray-600 hover:text-gray-900">Chuyến xe</a>
-        </div>
-        <div class="flex items-center gap-4">
-          <span class="text-sm text-gray-600">${user.display_name} (${user.role})</span>
-          <form method="POST" action="/api/auth/logout">
-            <button type="submit" class="text-sm text-red-600 hover:text-red-800 cursor-pointer">Đăng xuất</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  </nav>
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${content}</main>
-</body>
-</html>`;
+const GROUP_COLORS: Record<DauMucGroup, { bg: string; text: string; badge: string; dot: string }> = {
+  phap: { bg: '#dbeafe', text: '#1e40af', badge: 'bg-blue-100 text-blue-800', dot: 'bg-blue-500' },
+  y: { bg: '#fef3c7', text: '#d97706', badge: 'bg-amber-100 text-amber-800', dot: 'bg-amber-500' },
+  tiep: { bg: '#dcfce7', text: '#16a34a', badge: 'bg-green-100 text-green-800', dot: 'bg-green-500' },
+  balan: { bg: '#f1f5f9', text: '#64748b', badge: 'bg-gray-100 text-gray-700', dot: 'bg-gray-500' },
+  khac: { bg: '#f1f5f9', text: '#64748b', badge: 'bg-gray-100 text-gray-700', dot: 'bg-gray-500' },
+};
+
+const VALID_GROUPS: DauMucGroup[] = ['phap', 'y', 'tiep', 'balan', 'khac'];
+
+interface ChuyenRow {
+  id: string;
+  tuyen_id: string;
+  xe_id: string;
+  tai_xe_id: string;
+  ngay_di: string;
+  ngay_den: string;
+  trang_thai: string;
+  gia_chuyen: number;
+  tien_te: string;
+  da_thanh_toan: number;
+  bien_so: string | null;
+  so_xe: string | null;
 }
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function fmtDate(d: string | null | undefined): string {
+  if (!d) return '—';
+  return d.slice(0, 10);
+}
+
+function fmtNum(n: number | null | undefined): string {
+  if (n == null || n === 0) return '—';
+  return n.toLocaleString('vi-VN');
+}
+
+// ── API routes (registered before /:id to avoid wildcard match) ──────
+
+tuyenRoutes.get('/api/tuyen/:id', async (c) => {
+  const id = c.req.param('id');
+  const tuyen = await c.env.DB.prepare('SELECT * FROM tuyen WHERE id = ?').bind(id).first<Tuyen>();
+  if (!tuyen) return c.json({ error: 'Không tìm thấy tuyến' }, 404);
+  return c.json(tuyen);
+});
+
+tuyenRoutes.post('/api/tuyen', async (c) => {
+  const body = await c.req.json();
+  if (!body.ten) return c.json({ error: 'Tên tuyến là bắt buộc' }, 400);
+
+  const id = `t-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+  const group: DauMucGroup = VALID_GROUPS.includes(body.dau_muc_group) ? body.dau_muc_group : 'khac';
+  const mau = body.mau || (group === 'phap' ? 'blue' : group === 'y' ? 'amber' : group === 'tiep' ? 'green' : 'gray');
+
+  await c.env.DB.prepare(
+    'INSERT INTO tuyen (id, ten, diem_di, diem_den, tien_to, mau, dau_muc_group, khoang_cach_km) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(
+    id, body.ten, body.diem_di || '', body.diem_den || '',
+    body.tien_to || DM_GROUP_TIENTO[group], mau, group, body.khoang_cach_km || 0
+  ).run();
+
+  return c.json({ id }, 201);
+});
+
+tuyenRoutes.put('/api/tuyen/:id', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  if (!body.ten) return c.json({ error: 'Tên tuyến là bắt buộc' }, 400);
+
+  const group: DauMucGroup = VALID_GROUPS.includes(body.dau_muc_group) ? body.dau_muc_group : 'khac';
+  const mau = body.mau || (group === 'phap' ? 'blue' : group === 'y' ? 'amber' : group === 'tiep' ? 'green' : 'gray');
+
+  await c.env.DB.prepare(
+    'UPDATE tuyen SET ten=?, diem_di=?, diem_den=?, tien_to=?, mau=?, dau_muc_group=?, khoang_cach_km=? WHERE id=?'
+  ).bind(
+    body.ten, body.diem_di || '', body.diem_den || '',
+    body.tien_to || DM_GROUP_TIENTO[group], mau, group, body.khoang_cach_km || 0, id
+  ).run();
+
+  return c.json({ success: true });
+});
+
+tuyenRoutes.post('/api/tuyen/:id/delete', async (c) => {
+  const id = c.req.param('id');
+
+  const { results: refs } = await c.env.DB.prepare(
+    'SELECT id FROM chuyen_xe WHERE tuyen_id = ? LIMIT 1'
+  ).bind(id).all<{ id: string }>();
+
+  if (refs.length > 0) {
+    return c.json({ error: 'Không thể xóa — tuyến vẫn còn chuyến xe' }, 400);
+  }
+
+  await c.env.DB.prepare('DELETE FROM tuyen WHERE id=?').bind(id).run();
+  return c.json({ success: true });
+});
+
+// ── GET / — List all tuyen ──────────────────────────────────────────
 
 tuyenRoutes.get('/', async (c) => {
   const user = c.get('user');
-  const { results } = await c.env.DB.prepare('SELECT * FROM tuyen ORDER BY ten').all<Tuyen>();
 
-  const rows = (results as Tuyen[]).map((t) => `
-    <tr class="hover:bg-gray-50">
-      <td class="px-4 py-3 text-sm text-gray-900">${t.ten}</td>
-      <td class="px-4 py-3 text-sm text-gray-500">${t.diem_di || '-'}</td>
-      <td class="px-4 py-3 text-sm text-gray-500">${t.diem_den || '-'}</td>
-      <td class="px-4 py-3 text-sm text-gray-500">${t.tien_to || '-'}</td>
-      <td class="px-4 py-3 text-sm text-gray-500">${t.khoang_cach_km || 0} km</td>
-      <td class="px-4 py-3 text-sm">
-        <button onclick="editTuyen('${t.id}')" class="text-blue-600 hover:underline mr-2 cursor-pointer">Sửa</button>
-        <button onclick="deleteTuyen('${t.id}')" class="text-red-600 hover:underline cursor-pointer">Xóa</button>
-      </td>
-    </tr>
-  `).join('');
+  const { results: tuyens } = await c.env.DB.prepare(
+    'SELECT * FROM tuyen ORDER BY dau_muc_group, ten'
+  ).all<Tuyen>();
+
+  const { results: chuyenCounts } = await c.env.DB.prepare(
+    'SELECT tuyen_id, COUNT(*) as cnt FROM chuyen_xe GROUP BY tuyen_id'
+  ).all<{ tuyen_id: string; cnt: number }>();
+  const chuyenMap = new Map(chuyenCounts.map((r) => [r.tuyen_id, r.cnt]));
+
+  const { results: loCounts } = await c.env.DB.prepare(
+    'SELECT cx.tuyen_id, COUNT(lh.id) as cnt FROM lo_hang lh JOIN chuyen_xe cx ON lh.chuyen_xe_id = cx.id GROUP BY cx.tuyen_id'
+  ).all<{ tuyen_id: string; cnt: number }>();
+  const loMap = new Map(loCounts.map((r) => [r.tuyen_id, r.cnt]));
+
+  const groupOptions = VALID_GROUPS.map(
+    (g) => `<option value="${g}">${DM_GROUP_LABEL[g]}</option>`
+  ).join('');
+
+  const rows = (tuyens as Tuyen[]).map((t) => {
+    const colors = GROUP_COLORS[t.dau_muc_group] || GROUP_COLORS.khac;
+    const chCount = chuyenMap.get(t.id) || 0;
+    const loCount = loMap.get(t.id) || 0;
+    return tableRow([
+      `<span class="font-mono text-bodytext">${t.id.slice(0, 8)}</span>`,
+      `<a href="/tuyen/${t.id}" class="inline-flex items-center gap-2 hover:underline">
+            <span class="inline-block px-2.5 py-1 rounded-md text-xs font-semibold" style="background:${colors.bg};color:${colors.text}">${esc(t.ten)}</span>
+          </a>`,
+      `<span class="inline-flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full ${colors.dot}"></span>
+            <strong>${DM_GROUP_LABEL[t.dau_muc_group] || t.dau_muc_group}</strong>
+          </span>`,
+      `<span class="inline-block px-2 py-0.5 rounded-md bg-lightgray dark:bg-darkgray text-xs font-mono">${esc(t.tien_to)}</span>`,
+      `<span class="text-right tabular-nums block">${chCount}</span>`,
+      `<span class="text-right tabular-nums block">${loCount}</span>`,
+      tableActions(`editTuyen('${t.id}')`, `deleteTuyen('${t.id}')`),
+    ]);
+  }).join('');
 
   const content = `
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">Tuyến đường</h1>
-      <button onclick="showAddForm()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer">+ Thêm tuyến</button>
+    ${pageHeader('Tuyến vận tải', {
+      subtitle: 'Mỗi tuyến gắn với 1 nhóm đầu mục VT (Pháp / Ý / Tiệp / Balan / Khác)',
+      actions: btnPrimary('Tuyến mới', { icon: 'solar:add-circle-linear', onclick: 'showAddForm()' }),
+    })}
+
+    <div id="addForm" class="hidden mb-6">
+      ${card({
+        body: `<h3 id="formTitle" class="card-title mb-4">Thêm tuyến mới</h3>
+        <form id="tuyenForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        ${formGroup('Tên tuyến', input({ type: 'text', name: 'ten', required: true }), { required: true })}
+        ${formGroup('Nhóm đầu mục VT', select({ name: 'dau_muc_group', options: groupOptions }))}
+        ${formGroup('Tiền tố mã', input({ type: 'text', name: 'tien_to', placeholder: 'VD: F, W, C, P, K' }))}
+        ${formGroup('Điểm đi', input({ type: 'text', name: 'diem_di' }))}
+        ${formGroup('Điểm đến', input({ type: 'text', name: 'diem_den' }))}
+        ${formGroup('Khoảng cách (km)', input({ type: 'number', name: 'khoang_cach_km' }))}
+        <div class="col-span-full flex gap-2 pt-2">
+          <button type="submit" class="btn cursor-pointer">Lưu</button>
+          ${btnSecondary('Hủy', { onclick: 'hideAddForm()' })}
+        </div>
+      </form>`,
+      })}
     </div>
 
-    <div id="addForm" class="hidden bg-white rounded-lg shadow p-6 mb-6">
-      <h2 class="text-lg font-semibold mb-4">Thêm tuyến mới</h2>
-      <form id="tuyenForm" class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Tên tuyến</label>
-          <input type="text" name="ten" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Tiền tố</label>
-          <input type="text" name="tien_to" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Điểm đi</label>
-          <input type="text" name="diem_di" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Điểm đến</label>
-          <input type="text" name="diem_den" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Khoảng cách (km)</label>
-          <input type="number" name="khoang_cach_km" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        <div class="col-span-2 flex gap-2">
-          <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 cursor-pointer">Lưu</button>
-          <button type="button" onclick="hideAddForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300 cursor-pointer">Hủy</button>
-        </div>
-      </form>
-    </div>
-
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên tuyến</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Điểm đi</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Điểm đến</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tiền tố</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Khoảng cách</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200">${rows || '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Chưa có tuyến nào</td></tr>'}</tbody>
-      </table>
-    </div>
+    ${dataTable(
+      ['Mã', 'Tên tuyến', 'Đầu mục VT', 'Tiền tố', 'Số chuyến', 'Số phiếu', 'Thao tác'],
+      rows || tableEmpty(7, 'Chưa có tuyến nào'),
+    )}
 
     <script>
-    function showAddForm() { document.getElementById('addForm').classList.remove('hidden'); }
-    function hideAddForm() { document.getElementById('addForm').classList.add('hidden'); document.getElementById('tuyenForm').reset(); }
+    let editingId = null;
+
+    function showAddForm() {
+      editingId = null;
+      document.getElementById('formTitle').textContent = 'Thêm tuyến mới';
+      document.getElementById('tuyenForm').reset();
+      document.getElementById('addForm').classList.remove('hidden');
+    }
+
+    function hideAddForm() {
+      editingId = null;
+      document.getElementById('addForm').classList.add('hidden');
+      document.getElementById('tuyenForm').reset();
+    }
 
     document.getElementById('tuyenForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const body = Object.fromEntries(fd.entries());
       body.khoang_cach_km = Number(body.khoang_cach_km) || 0;
-      const res = await fetch('/api/tuyen', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+
+      const mauMap = { phap:'blue', y:'amber', tiep:'green', balan:'gray', khac:'gray' };
+      body.mau = mauMap[body.dau_muc_group] || 'gray';
+
+      if (!body.tien_to) {
+        const prefixMap = { phap:'F', y:'W', tiep:'C', balan:'P', khac:'K' };
+        body.tien_to = prefixMap[body.dau_muc_group] || '';
+      }
+
+      const url = editingId ? '/tuyen/api/tuyen/' + editingId : '/tuyen/api/tuyen';
+      const method = editingId ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
       if (res.ok) { location.reload(); } else { const err = await res.json(); alert(err.error || 'Lỗi'); }
     });
 
     async function editTuyen(id) {
-      const res = await fetch('/api/tuyen');
-      const data = await res.json();
-      const t = data.find(x => x.id === id);
-      if (!t) return alert('Không tìm thấy');
+      const res = await fetch('/tuyen/api/tuyen/' + id);
+      const t = await res.json();
+      if (!t || t.error) return alert('Không tìm thấy tuyến');
+      editingId = id;
+      document.getElementById('formTitle').textContent = 'Sửa tuyến';
       const form = document.getElementById('tuyenForm');
       form.ten.value = t.ten || '';
+      form.dau_muc_group.value = t.dau_muc_group || 'khac';
       form.tien_to.value = t.tien_to || '';
       form.diem_di.value = t.diem_di || '';
       form.diem_den.value = t.diem_den || '';
       form.khoang_cach_km.value = t.khoang_cach_km || '';
-      form.onsubmit = async (e) => {
-        e.preventDefault();
-        const fd = new FormData(form);
-        const body = Object.fromEntries(fd.entries());
-        body.khoang_cach_km = Number(body.khoang_cach_km) || 0;
-        const ures = await fetch('/api/tuyen/' + id, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-        if (ures.ok) { location.reload(); } else { const err = await ures.json(); alert(err.error || 'Lỗi'); }
-      };
-      showAddForm();
+      document.getElementById('addForm').classList.remove('hidden');
     }
 
     async function deleteTuyen(id) {
       if (!confirm('Xóa tuyến này?')) return;
-      const res = await fetch('/api/tuyen/' + id, { method: 'DELETE' });
+      const res = await fetch('/tuyen/api/tuyen/' + id + '/delete', { method: 'POST' });
       if (res.ok) { location.reload(); } else { const err = await res.json(); alert(err.error || 'Lỗi'); }
     }
     </script>
   `;
 
-  return c.html(layout('Tuyến đường', content, user));
+  return c.html(layout('Tuyến vận tải', content, user, 'tuyen'));
 });
 
-tuyenRoutes.get('/api/tuyen', async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT * FROM tuyen ORDER BY ten').all<Tuyen>();
-  return c.json(results);
-});
+// ── GET /:id — Detail view ──────────────────────────────────────────
 
-tuyenRoutes.post('/api/tuyen', async (c) => {
-  const body = await c.req.json();
-  const id = `t-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
-  await c.env.DB.prepare(
-    'INSERT INTO tuyen (id, ten, diem_di, diem_den, tien_to, khoang_cach_km) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(id, body.ten, body.diem_di || '', body.diem_den || '', body.tien_to || '', body.khoang_cach_km || 0).run();
-  return c.json({ id, ...body }, 201);
-});
-
-tuyenRoutes.put('/api/tuyen/:id', async (c) => {
+tuyenRoutes.get('/:id', async (c) => {
+  const user = c.get('user');
   const id = c.req.param('id');
-  const body = await c.req.json();
-  await c.env.DB.prepare(
-    'UPDATE tuyen SET ten=?, diem_di=?, diem_den=?, tien_to=?, khoang_cach_km=? WHERE id=?'
-  ).bind(body.ten, body.diem_di || '', body.diem_den || '', body.tien_to || '', body.khoang_cach_km || 0, id).run();
-  return c.json({ success: true });
-});
 
-tuyenRoutes.delete('/api/tuyen/:id', async (c) => {
-  const id = c.req.param('id');
-  await c.env.DB.prepare('DELETE FROM tuyen WHERE id=?').bind(id).run();
-  return c.json({ success: true });
+  const tuyen = await c.env.DB.prepare('SELECT * FROM tuyen WHERE id = ?').bind(id).first<Tuyen>();
+  if (!tuyen) {
+    return c.redirect('/tuyen');
+  }
+
+  const colors = GROUP_COLORS[tuyen.dau_muc_group] || GROUP_COLORS.khac;
+
+  const { results: chuyens } = await c.env.DB.prepare(
+    `SELECT cx.*, x.bien_so, x.so_xe FROM chuyen_xe cx LEFT JOIN xe x ON cx.xe_id = x.id WHERE cx.tuyen_id = ? ORDER BY cx.ngay_di DESC LIMIT 30`
+  ).bind(id).all<ChuyenRow>();
+
+  const chuyenIds = (chuyens as ChuyenRow[]).map((ch) => `'${ch.id}'`).join(',');
+  let loCountMap = new Map<string, number>();
+  if (chuyenIds) {
+    const { results: loCounts } = await c.env.DB.prepare(
+      `SELECT chuyen_xe_id, COUNT(*) as cnt FROM lo_hang WHERE chuyen_xe_id IN (${chuyenIds}) GROUP BY chuyen_xe_id`
+    ).all<{ chuyen_xe_id: string; cnt: number }>();
+    loCountMap = new Map(loCounts.map((r) => [r.chuyen_xe_id, r.cnt]));
+  }
+
+  const { results: totalLo } = await c.env.DB.prepare(
+    `SELECT COUNT(lh.id) as cnt FROM lo_hang lh JOIN chuyen_xe cx ON lh.chuyen_xe_id = cx.id WHERE cx.tuyen_id = ?`
+  ).bind(id).all<{ cnt: number }>();
+  const totalLoCount = (totalLo[0] as { cnt: number } | undefined)?.cnt || 0;
+
+  const chuyenRows = (chuyens as ChuyenRow[]).map((ch) => {
+    const loC = loCountMap.get(ch.id) || 0;
+    const ttLabel = ch.da_thanh_toan ? '<span class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">✓</span>' : '<span class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">Chưa</span>';
+    return `
+      <tr class="hover:bg-gray-50 border-b border-gray-100">
+        <td class="px-4 py-3 text-sm"><a href="/chuyen-xe" class="text-blue-600 hover:underline font-mono text-xs">${ch.id.slice(0, 8)}</a></td>
+        <td class="px-4 py-3 text-sm text-gray-700">${ch.bien_so || ch.so_xe || '—'}</td>
+        <td class="px-4 py-3 text-sm text-gray-500">${fmtDate(ch.ngay_di)}</td>
+        <td class="px-4 py-3 text-sm text-gray-500">${fmtDate(ch.ngay_den)}</td>
+        <td class="px-4 py-3 text-sm text-right tabular-nums">${loC}</td>
+        <td class="px-4 py-3 text-sm text-right tabular-nums">${fmtNum(ch.gia_chuyen)} ${ch.tien_te || 'PLN'}</td>
+        <td class="px-4 py-3 text-sm">${ttLabel}</td>
+      </tr>`;
+  }).join('');
+
+  const content = `
+    <a href="/tuyen" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
+      <iconify-icon icon="solar:arrow-left-linear" class="text-base"></iconify-icon>
+      Quay lại
+    </a>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <iconify-icon icon="solar:route-linear" class="text-2xl" style="color:${colors.text}"></iconify-icon>
+            ${esc(tuyen.ten)}
+          </h2>
+          <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
+            <span>Mã: <span class="font-mono text-gray-700">${tuyen.id.slice(0, 8)}</span></span>
+            <span>Đầu mục: <strong>${DM_GROUP_LABEL[tuyen.dau_muc_group] || tuyen.dau_muc_group}</strong></span>
+            <span>Tiền tố: <strong class="font-mono">${esc(tuyen.tien_to)}</strong></span>
+            ${tuyen.diem_di ? `<span>Điểm đi: ${esc(tuyen.diem_di)}</span>` : ''}
+            ${tuyen.diem_den ? `<span>Điểm đến: ${esc(tuyen.diem_den)}</span>` : ''}
+          </div>
+        </div>
+        <div class="flex items-center gap-4 text-sm">
+          <div class="text-center px-4 py-2 bg-blue-50 rounded-lg">
+            <div class="text-lg font-bold text-blue-700">${(chuyens as ChuyenRow[]).length}</div>
+            <div class="text-xs text-blue-600">Chuyến</div>
+          </div>
+          <div class="text-center px-4 py-2 bg-amber-50 rounded-lg">
+            <div class="text-lg font-bold text-amber-700">${totalLoCount}</div>
+            <div class="text-xs text-amber-600">Phiếu</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <strong class="text-sm text-gray-700">Chuyến (${(chuyens as ChuyenRow[]).length})</strong>
+      </div>
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50/50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Xe</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày đi</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày về</th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Phiếu</th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Giá</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">TT</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          ${chuyenRows || '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-400">Chưa có chuyến nào trên tuyến này</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  return c.html(layout('Tuyến vận tải', content, user, 'tuyen'));
 });

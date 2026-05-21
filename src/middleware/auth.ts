@@ -89,17 +89,37 @@ async function deleteSession(db: D1Database, token: string): Promise<void> {
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
-  admin: 'Quản trị',
-  ke_toan: 'Kế toán',
-  tai_xe: 'Tài xế',
+  admin: 'Admin / Điều hành',
+  ketoanTruong: 'Kế toán trưởng',
+  ketoanVien: 'Kế toán viên',
+  nhanvien: 'Nhân viên',
   kho: 'Thủ kho',
+  laixe: 'Lái xe',
 };
 
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {
-  admin: ['dashboard', 'khach-hang', 'hang', 'tuyen', 'xe', 'tai-xe', 'chuyen-xe', 'users'],
-  ke_toan: ['dashboard', 'khach-hang', 'hang', 'chuyen-xe'],
-  tai_xe: ['dashboard', 'chuyen-xe'],
-  kho: ['dashboard', 'kho'],
+  admin: ['dashboard','lo-hang','doi-tac','tuyen','chuyen-xe','kho','nhan-vien','cham-cong','thu-chi','cong-cu','manager'],
+  ketoanTruong: ['dashboard','lo-hang','doi-tac','tuyen','chuyen-xe','kho','nhan-vien','cham-cong','thu-chi','cong-cu','manager'],
+  ketoanVien: ['dashboard','lo-hang','doi-tac','tuyen','chuyen-xe','kho','nhan-vien','cham-cong','thu-chi','cong-cu'],
+  nhanvien: ['dashboard','lo-hang','doi-tac','tuyen','chuyen-xe','kho','nhan-vien','cham-cong','thu-chi','cong-cu'],
+  kho: ['lo-hang','kho'],
+  laixe: ['lo-hang'],
+};
+
+export const ROLE_CAN_EDIT_TIEN_HANG: Record<Role, boolean> = {
+  admin: true, ketoanTruong: true, ketoanVien: false, nhanvien: false, kho: false, laixe: false,
+};
+
+export const ROLE_CAN_DELETE: Record<Role, boolean> = {
+  admin: true, ketoanTruong: false, ketoanVien: false, nhanvien: false, kho: false, laixe: false,
+};
+
+export const ROLE_CAN_CHOT_SO: Record<Role, boolean> = {
+  admin: true, ketoanTruong: true, ketoanVien: false, nhanvien: false, kho: false, laixe: false,
+};
+
+export const ROLE_CAN_VIEW_LOI_NHUAN: Record<Role, boolean> = {
+  admin: true, ketoanTruong: true, ketoanVien: false, nhanvien: false, kho: false, laixe: false,
 };
 
 export function hasPermission(role: Role, resource: string): boolean {
