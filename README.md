@@ -44,34 +44,6 @@ public/assets/          # TailwindAdmin CSS, JS, fonts
 | `npm run db:migrate:remote` | Apply migrations to production |
 | `npm run db:seed`           | Seed local database            |
 
-## GitHub & CI
-
-**CI** (`.github/workflows/ci.yml`) runs on every push/PR to `main` or `master`:
-
-- TypeScript check
-- Tailwind CSS build
-- Vitest unit tests
-- `wrangler deploy --dry-run` (bundle validation)
-
-**Deploy** (`.github/workflows/deploy.yml`) runs on push to `main`/`master` after quality checks pass. Requires repository secret `CLOUDFLARE_API_TOKEN`.
-
-### Create the repository
-
-```bash
-gh auth login
-gh repo create he-thong-quan-ly --private --source=. --remote=origin --push
-```
-
-Or create the repo on GitHub, then:
-
-```bash
-git remote add origin https://github.com/YOUR_USER/he-thong-quan-ly.git
-git push -u origin master
-```
-
-Add `CLOUDFLARE_API_TOKEN` under **Settings → Secrets and variables → Actions** for production deploys.
-
-
 ## License
 
 MIT
