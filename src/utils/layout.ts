@@ -40,6 +40,7 @@ export function layout(title: string, content: string, user: { display_name: str
   <title>${title} - Hệ thống Quản lý</title>
   <link rel="stylesheet" href="/assets/tailwind/tailwind.css">
   <link rel="stylesheet" href="/assets/css/theme.css">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <script>
     (function () {
       if (localStorage.getItem('htqlvt-theme') === 'dark') {

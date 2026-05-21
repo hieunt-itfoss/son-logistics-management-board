@@ -40,6 +40,7 @@ authRoutes.get("/login", async (c) => {
   <title>Đăng nhập - Hệ thống Quản lý Vận tải</title>
   <link rel="stylesheet" href="/assets/tailwind/tailwind.css">
   <link rel="stylesheet" href="/assets/css/theme.css">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
 </head>
 <body class="bg-lightgray h-full">
