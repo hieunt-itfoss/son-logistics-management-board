@@ -34,6 +34,7 @@ public/assets/          # TailwindAdmin CSS, JS, fonts
 
 ## Development
 
+
 | Command                     | Description                    |
 | --------------------------- | ------------------------------ |
 | `npm run dev`               | Local dev server               |
@@ -44,6 +45,26 @@ public/assets/          # TailwindAdmin CSS, JS, fonts
 | `npm run db:migrate:remote` | Apply migrations to production |
 | `npm run db:seed`           | Seed local database            |
 
+<<<<<<< Updated upstream
+=======
+
+### Create the repository
+
+```bash
+gh auth login
+gh repo create he-thong-quan-ly --private --source=. --remote=origin --push
+```
+
+Or create the repo on GitHub, then:
+
+```bash
+git remote add origin https://github.com/YOUR_USER/he-thong-quan-ly.git
+git push -u origin master
+```
+
+Add `CLOUDFLARE_API_TOKEN` under **Settings → Secrets and variables → Actions** for production deploys.
+
+>>>>>>> Stashed changes
 ## License
 
 MIT
