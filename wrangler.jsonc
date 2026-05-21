@@ -17,6 +17,5 @@
   ],
   "vars": {
     "APP_NAME": "Hệ thống quản lý vận tải",
-    "SESSION_SECRET": "change-me-in-production-use-wrangler-secret"
   }
 }
