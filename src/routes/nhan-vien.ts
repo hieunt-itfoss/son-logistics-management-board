@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import type { Env, NhanVien, VaiTro } from '../types';
+import type { Env, NhanVien, VaiTro, AppVariables } from '../types';
 import { layout } from '../utils/layout';
 import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, tableActions, btnPrimary } from '../utils/ui';
 
-export const nhanVienRoutes = new Hono<{ Bindings: Env }>();
+export const nhanVienRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
 const ROLE_LABELS: Record<VaiTro, string> = {
   admin: 'Admin / Điều hành',
@@ -81,13 +81,13 @@ nhanVienRoutes.get('/', async (c) => {
     filterHtml += `<a href="/nhan-vien?vai_tro=${r}" class="px-3 py-1 rounded-full text-sm font-medium cursor-pointer ${activeCls}">${ROLE_LABELS[r]} (${cnt})</a>`;
   }
 
-  const canEdit = user.role === 'admin' || user.role === 'ketoanTruong';
-  const canDelete = user.role === 'admin';
+  const canEdit = c.get('perms').canEdit;
+  const canDelete = c.get('perms').canDelete;
 
   const headers = ['Mã', 'Tên', 'Vai trò', 'SĐT', 'Địa chỉ', ...(canEdit ? ['Thao tác'] : [])];
   const rows = nvs.map((nv) => {
     const actions = canEdit
-      ? `<div class="flex items-center gap-1">${tableActionLink(`/nhan-vien/${nv.id}/edit`)}${canDelete ? tableActions(undefined, `deleteNV('${nv.id}','${escapeHtml(nv.ten)}')`) : ''}</div>`
+      ? `<div class="flex items-center justify-center gap-1">${tableActionLink(`/nhan-vien/${nv.id}/edit`)}${canDelete ? tableActions(undefined, `deleteNV('${nv.id}','${escapeHtml(nv.ten)}')`, undefined, { center: true }) : ''}</div>`
       : '';
     return tableRow([
       `<span class="font-mono text-bodytext">${nv.id}</span>`,
@@ -96,7 +96,7 @@ nhanVienRoutes.get('/', async (c) => {
       escapeHtml(nv.sdt || '—'),
       escapeHtml(nv.dia_chi || '—'),
       ...(canEdit ? [actions] : []),
-    ]);
+    ], { align: 'center' });
   }).join('');
 
   const content = `
@@ -120,7 +120,7 @@ nhanVienRoutes.get('/', async (c) => {
       </div>
     </form>
 
-    ${dataTable(headers, rows || tableEmpty(canEdit ? 6 : 5))}
+    ${dataTable(headers, rows || tableEmpty(canEdit ? 6 : 5), { align: 'center' })}
 
     ${canDelete ? `
     <script>
@@ -138,8 +138,7 @@ nhanVienRoutes.get('/', async (c) => {
 // ===================== CREATE FORM =====================
 nhanVienRoutes.get('/create', async (c) => {
   const user = c.get('user');
-  const canEdit = user.role === 'admin' || user.role === 'ketoanTruong';
-  if (!canEdit) return c.redirect('/nhan-vien');
+  if (!c.get('perms').canEdit) return c.redirect('/nhan-vien');
 
   const { results: maxRows } = await c.env.DB.prepare(
     "SELECT id FROM nhan_vien WHERE id LIKE 'NV-%' ORDER BY id DESC LIMIT 1"
@@ -159,8 +158,7 @@ nhanVienRoutes.get('/create', async (c) => {
 // ===================== EDIT FORM =====================
 nhanVienRoutes.get('/:id/edit', async (c) => {
   const user = c.get('user');
-  const canEdit = user.role === 'admin' || user.role === 'ketoanTruong';
-  if (!canEdit) return c.redirect('/nhan-vien');
+  if (!c.get('perms').canEdit) return c.redirect('/nhan-vien');
 
   const id = c.req.param('id');
   const nv = await c.env.DB.prepare('SELECT * FROM nhan_vien WHERE id = ? AND active = 1').bind(id).first<NhanVien>();
@@ -277,8 +275,7 @@ function nvFormHtml(
 // ===================== API: CREATE / UPDATE =====================
 nhanVienRoutes.post('/api/nhan-vien', async (c) => {
   const user = c.get('user');
-  const canEdit = user.role === 'admin' || user.role === 'ketoanTruong';
-  if (!canEdit) return c.json({ error: 'Không có quyền' }, 403);
+  if (!c.get('perms').canEdit) return c.json({ error: 'Không có quyền' }, 403);
 
   const body = await c.req.json();
   const { id, ten, vai_tro, sdt, so_giay_to, dia_chi, ghi_chu } = body;
@@ -313,7 +310,7 @@ nhanVienRoutes.get('/api/nhan-vien/:id', async (c) => {
 // ===================== API: SOFT DELETE =====================
 nhanVienRoutes.post('/api/nhan-vien/:id/delete', async (c) => {
   const user = c.get('user');
-  if (user.role !== 'admin') return c.json({ error: 'Chỉ Admin mới được xoá' }, 403);
+  if (!c.get('perms').canDelete) return c.json({ error: 'Không có quyền xoá' }, 403);
 
   const id = c.req.param('id');
   await c.env.DB.prepare(

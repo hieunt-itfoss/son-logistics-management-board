@@ -178,13 +178,13 @@ chuyenXeRoutes.get('/', async (c) => {
       esc(ch.tai_xe_ten || '—'),
       fmtDate(ch.ngay_di),
       fmtDate(ch.ngay_den),
-      `<span class="text-right block tabular-nums">${fmtNum(ch.total_kien)}</span>`,
-      `<span class="text-right block font-semibold">${fmtNum(ch.gia_chuyen)} ${ch.tien_te}</span>`,
+      `<span class="tabular-nums">${fmtNum(ch.total_kien)}</span>`,
+      `<span class="font-semibold tabular-nums">${fmtNum(ch.gia_chuyen)} ${ch.tien_te}</span>`,
       `<span class="truncate max-w-[120px] inline-block">${esc(ch.so_sent_va_gt) || '—'}</span>`,
       payTag,
       ttTag,
-      tableActionLink(`/chuyen-xe/create?edit=${esc(ch.id)}`),
-    ]);
+      `<div class="flex items-center justify-center">${tableActionLink(`/chuyen-xe/create?edit=${esc(ch.id)}`)}</div>`,
+    ], { align: 'center' });
   }).join('');
 
   const hasFilter = q || tuyenFilter || statusFilter || range !== 'all';
@@ -241,6 +241,7 @@ chuyenXeRoutes.get('/', async (c) => {
     ${dataTable(
       ['Mã chuyến', 'Số xe', 'Biển số', 'Tuyến', 'Cty VT', 'Tài xế', 'Ngày đi', 'Ngày về', 'Kiện', 'Giá chuyến', 'SENT/GT', 'TT cty VT', 'Trạng thái', ''],
       rows || tableEmpty(14),
+      { align: 'center' },
     )}
     <div class="card mt-0 rounded-t-none border-t-0 -mt-6">
       <div class="card-body py-3 flex justify-between items-start flex-wrap gap-4 text-sm border-t border-light-dark">

@@ -15,9 +15,12 @@ A Vietnamese transport management system built on Cloudflare Workers + D1 databa
 
 ```bash
 npm install
+cp .dev.vars.example .dev.vars   # required for login (SESSION_SECRET)
 npm run dev          # http://localhost:8787
 npm run deploy       # Deploy to Cloudflare
 ```
+
+Default login (after `npm run db:seed`): `admin` / `admin123`
 
 ## Project Structure
 

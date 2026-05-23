@@ -1,3 +1,5 @@
+import type { EffectivePerms } from './utils/permissions';
+
 export type Role = 'admin' | 'ketoanTruong' | 'ketoanVien' | 'nhanvien' | 'kho' | 'laixe';
 
 export type VaiTro = Role;
@@ -48,10 +50,18 @@ export interface User {
   password_hash: string;
   display_name: string;
   role: Role;
+  custom_perms: string;
+  must_change_password: number;
   active: number;
   created_at: string;
   updated_at: string;
 }
+
+export type AppVariables = {
+  user: User;
+  session: Session;
+  perms: EffectivePerms;
+};
 
 export interface Session {
   id: string;

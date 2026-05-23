@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env } from "../types";
+import type { Env, Role, AppVariables } from "../types";
 import {
   verifyPassword,
   hashPassword,
@@ -8,7 +8,10 @@ import {
   deleteSession,
   setSessionCookie,
   clearSessionCookie,
+  hasPermission,
 } from "../middleware/auth";
+import { getDefaultHomePath } from "../middleware/rbac";
+import { layout } from "../utils/layout";
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
@@ -117,7 +120,11 @@ authRoutes.get("/login", async (c) => {
             <p class="card-subtitle mt-1 mb-6">Nhập thông tin tài khoản để truy cập hệ thống</p>
 
             ${error ? `<div class="mb-4 p-3 rounded-md bg-lighterror text-error text-sm border border-error/20">
-              ${error === "1" ? "Tên đăng nhập hoặc mật khẩu không đúng." : "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại."}
+              ${error === "1"
+    ? "Tên đăng nhập hoặc mật khẩu không đúng."
+    : error === "config"
+      ? "Thiếu SESSION_SECRET. Tạo file .dev.vars từ .dev.vars.example rồi chạy lại npm run dev."
+      : "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại."}
             </div>` : ""}
 
             <form method="POST" action="/api/auth/login" class="space-y-5">
@@ -164,17 +171,22 @@ authRoutes.post("/api/auth/login", async (c) => {
     return c.redirect("/login?error=1");
   }
 
+  const sessionSecret = (c.env.SESSION_SECRET ?? '').trim();
+  if (!sessionSecret) {
+    return c.redirect('/login?error=config');
+  }
+
   const valid = await verifyPassword(
     password,
     (user as any).password_hash,
-    c.env.SESSION_SECRET,
+    sessionSecret,
   );
   if (!valid) {
     return c.redirect("/login?error=1");
   }
 
   if (!isHashed((user as any).password_hash)) {
-    const properHash = await hashPassword(password, c.env.SESSION_SECRET);
+    const properHash = await hashPassword(password, sessionSecret);
     await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
       .bind(properHash, (user as any).id)
       .run();
@@ -183,10 +195,12 @@ authRoutes.post("/api/auth/login", async (c) => {
   const token = await createSession(
     c.env.DB,
     (user as any).id,
-    c.env.SESSION_SECRET,
+    sessionSecret,
   );
   setSessionCookie(c, token);
-  return c.redirect('/');
+  const role = (user as { role: Role }).role;
+  const home = hasPermission(role, 'dashboard') ? '/' : getDefaultHomePath(role);
+  return c.redirect(home);
 });
 
 authRoutes.post("/api/auth/logout", async (c) => {
@@ -202,4 +216,89 @@ authRoutes.post("/api/auth/logout", async (c) => {
 
   clearSessionCookie(c);
   return c.redirect('/login');
+});
+
+// ── Change-password routes (mounted in protectedApp so user context is available) ──
+export const changePasswordRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+
+changePasswordRoutes.get('/change-password', (c) => {
+  const user = c.get('user');
+  const error = new URL(c.req.url).searchParams.get('error');
+  const forced = user.must_change_password === 1;
+
+  const errorMsg = error === 'short'
+    ? 'Mật khẩu mới phải có ít nhất 6 ký tự.'
+    : error === 'mismatch'
+      ? 'Mật khẩu mới và xác nhận không khớp.'
+      : error === 'wrong'
+        ? 'Mật khẩu hiện tại không đúng.'
+        : null;
+
+  const content = `
+    <div class="max-w-md mx-auto mt-8">
+      ${forced ? `
+        <div class="mb-6 p-4 rounded-xl bg-lightwarning/40 border border-warning/30 text-warning text-sm flex gap-2 items-start">
+          <iconify-icon icon="solar:lock-password-linear" class="text-xl shrink-0 mt-0.5"></iconify-icon>
+          <span>Tài khoản của bạn cần đổi mật khẩu trước khi tiếp tục sử dụng hệ thống.</span>
+        </div>` : ''}
+
+      <div class="card">
+        <div class="card-body space-y-5">
+          <h2 class="text-xl font-semibold text-dark dark:text-white">Đổi mật khẩu</h2>
+
+          ${errorMsg ? `<div class="p-3 rounded-lg bg-lighterror text-error text-sm">${errorMsg}</div>` : ''}
+
+          <form method="POST" action="/api/auth/change-password" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-dark dark:text-white mb-1">Mật khẩu hiện tại</label>
+              <input type="password" name="current_password" required class="form-control w-full" placeholder="Nhập mật khẩu hiện tại">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-dark dark:text-white mb-1">Mật khẩu mới <span class="text-error">*</span></label>
+              <input type="password" name="new_password" required minlength="6" class="form-control w-full" placeholder="Ít nhất 6 ký tự">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-dark dark:text-white mb-1">Xác nhận mật khẩu mới <span class="text-error">*</span></label>
+              <input type="password" name="confirm_password" required class="form-control w-full" placeholder="Nhập lại mật khẩu mới">
+            </div>
+            <div class="flex gap-3 pt-2">
+              <button type="submit" class="btn">Đổi mật khẩu</button>
+              ${!forced ? `<a href="/" class="btn-outline-secondary">Huỷ</a>` : ''}
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return c.html(layout('Đổi mật khẩu', content, user, ''));
+});
+
+changePasswordRoutes.post('/api/auth/change-password', async (c) => {
+  const user = c.get('user');
+  const formData = await c.req.formData();
+  const currentPassword = formData.get('current_password') as string;
+  const newPassword = formData.get('new_password') as string;
+  const confirmPassword = formData.get('confirm_password') as string;
+
+  if (!newPassword || newPassword.length < 6) {
+    return c.redirect('/change-password?error=short');
+  }
+  if (newPassword !== confirmPassword) {
+    return c.redirect('/change-password?error=mismatch');
+  }
+
+  const secret = (c.env.SESSION_SECRET ?? '').trim();
+  const valid = await verifyPassword(currentPassword, user.password_hash, secret);
+  if (!valid) {
+    return c.redirect('/change-password?error=wrong');
+  }
+
+  const newHash = await hashPassword(newPassword, secret);
+  await c.env.DB.prepare(
+    `UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime('now') WHERE id = ?`
+  ).bind(newHash, user.id).run();
+
+  const home = hasPermission(user.role, 'dashboard') ? '/' : getDefaultHomePath(user.role);
+  return c.redirect(home);
 });

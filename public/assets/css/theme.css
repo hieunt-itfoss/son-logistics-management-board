@@ -261,3 +261,382 @@ html {
 .dark .htql-ops-mini-item .label {
   color: var(--darklink);
 }
+
+/* ── Shared modals (all pages) ───────────────────────────────── */
+.htql-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 1rem 2rem;
+  background: rgba(15, 20, 25, 0.55);
+  backdrop-filter: blur(4px);
+  overflow-y: auto;
+}
+
+.htql-modal-backdrop.hidden {
+  display: none;
+}
+
+.htql-modal-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  max-height: min(88dvh, 900px);
+  background: var(--white);
+  color: var(--dark);
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  animation: htqlModalIn 0.2s ease-out;
+}
+
+.dark .htql-modal-panel {
+  background: var(--dark);
+  color: var(--darklink);
+  border: 1px solid var(--darkborder);
+}
+
+.htql-modal-panel--sm { max-width: 24rem; }
+.htql-modal-panel--md { max-width: 28rem; }
+.htql-modal-panel--lg { max-width: 32rem; }
+.htql-modal-panel--xl { max-width: 36rem; }
+.htql-modal-panel--2xl { max-width: 42rem; }
+
+.htql-import-modal {
+  max-width: 48rem;
+}
+
+@keyframes htqlModalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.htql-modal-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--light-dark);
+  cursor: grab;
+  user-select: none;
+}
+
+.htql-modal-header.htql-modal-dragging {
+  cursor: grabbing;
+}
+
+.dark .htql-modal-header {
+  border-bottom-color: var(--darkborder);
+}
+
+.htql-modal-header-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.htql-modal-icon {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: #fff;
+}
+
+.htql-modal-icon iconify-icon {
+  font-size: 1.25rem;
+}
+
+.htql-modal-title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--dark);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dark .htql-modal-title {
+  color: var(--white);
+}
+
+.htql-modal-close {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--bodytext);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.htql-modal-close:hover {
+  background: var(--lightgray);
+  color: var(--dark);
+}
+
+.dark .htql-modal-close {
+  color: var(--darklink);
+}
+
+.dark .htql-modal-close:hover {
+  background: var(--darkgray);
+  color: var(--white);
+}
+
+.htql-modal-close iconify-icon {
+  font-size: 1.375rem;
+}
+
+.htql-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 1.25rem;
+}
+
+.htql-modal-footer {
+  flex-shrink: 0;
+  padding: 0.75rem 1.25rem 1rem;
+  border-top: 1px solid var(--light-dark);
+  background: var(--white);
+}
+
+.dark .htql-modal-footer {
+  border-top-color: var(--darkborder);
+  background: var(--dark);
+}
+
+.htql-modal-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.htql-modal-footer-split {
+  justify-content: space-between;
+}
+
+.htql-modal-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.htql-modal-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bodytext);
+  margin-bottom: 0.5rem;
+}
+
+.dark .htql-modal-label {
+  color: var(--darklink);
+}
+
+.htql-modal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--bordergray);
+  background: transparent;
+  font-size: 0.875rem;
+  color: var(--link);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.htql-modal-chip:hover {
+  background: var(--lightgray);
+}
+
+.dark .htql-modal-chip {
+  border-color: var(--darkborder);
+  color: var(--darklink);
+}
+
+.dark .htql-modal-chip:hover {
+  background: var(--darkgray);
+}
+
+.htql-modal-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--bordergray);
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--link);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.htql-modal-btn-outline:hover {
+  background: var(--lightgray);
+}
+
+.dark .htql-modal-btn-outline {
+  border-color: var(--darkborder);
+  color: var(--darklink);
+}
+
+.dark .htql-modal-btn-outline:hover {
+  background: var(--darkgray);
+}
+
+.htql-import-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.625rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--bordergray);
+  color: var(--bodytext);
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .htql-import-tab {
+    flex-direction: row;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+}
+
+.htql-import-tab:hover {
+  border-color: var(--primary);
+  color: var(--dark);
+}
+
+.dark .htql-import-tab {
+  border-color: var(--darkborder);
+  color: var(--darklink);
+}
+
+.dark .htql-import-tab:hover {
+  color: var(--white);
+}
+
+.htql-import-tab.active {
+  border-color: var(--primary);
+  background: var(--lightprimary);
+  color: var(--primary);
+}
+
+.dark .htql-import-tab.active {
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+  color: var(--white);
+}
+
+.htql-import-dropzone {
+  position: relative;
+  display: block;
+  border: 2px dashed var(--bordergray);
+  border-radius: 0.75rem;
+  padding: 2rem 1.25rem;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.htql-import-dropzone:hover {
+  border-color: var(--primary);
+}
+
+.dark .htql-import-dropzone {
+  border-color: var(--darkborder);
+}
+
+.htql-import-dropzone.dz-dragover {
+  border-color: var(--primary) !important;
+  background: color-mix(in oklab, var(--primary) 8%, transparent) !important;
+}
+
+.htql-import-dropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 10;
+  font-size: 0;
+}
+
+.htql-import-dropzone-text {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--link);
+}
+
+.dark .htql-import-dropzone-text {
+  color: var(--darklink);
+}
+
+.htql-import-dropzone-hint {
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--bodytext);
+}
+
+.dark .htql-import-dropzone-hint {
+  color: var(--darklink);
+  opacity: 0.85;
+}
+
+.htql-import-file-name {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--primary);
+}
+
+.htql-modal-panel .form-control {
+  width: 100%;
+}

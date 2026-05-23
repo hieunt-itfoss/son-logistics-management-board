@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import type { Env, ChamCong, NhanVien } from '../types';
+import type { Env, ChamCong, NhanVien, AppVariables } from '../types';
 import { layout } from '../utils/layout';
-import { pageHeader, card, dataTable, tableRow, tableEmpty, btnPrimary, btnSecondary } from '../utils/ui';
+import { pageHeader, card, dataTable, tableRow, tableEmpty, btnPrimary, btnSecondary, modalShell, modalFooterInner, formGroup, input, select } from '../utils/ui';
 
-export const chamCongRoutes = new Hono<{ Bindings: Env }>();
+export const chamCongRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -44,10 +44,10 @@ chamCongRoutes.get('/', async (c) => {
       `<span class="font-medium text-dark dark:text-white">${esc(r.nhan_vien_ten)}</span>`,
       `<span class="inline-block px-2.5 py-1 rounded-md text-xs font-medium ${color}">${TT_LABEL[r.trang_thai] || r.trang_thai}</span>`,
       esc(r.ghi_chu || '—'),
-    ]);
+    ], { align: 'center' });
   }).join('');
 
-  const canEdit = ['admin', 'ketoanTruong', 'nhanvien'].includes(user.role);
+  const canEdit = c.get('perms').canEdit;
 
   const content = `
     ${pageHeader('Chấm công', {
@@ -74,46 +74,27 @@ chamCongRoutes.get('/', async (c) => {
       </div>
     </div>
 
-    ${dataTable(['Ngày', 'Nhân viên', 'Trạng thái', 'Ghi chú'], rows || tableEmpty(4))}
+    ${dataTable(['Ngày', 'Nhân viên', 'Trạng thái', 'Ghi chú'], rows || tableEmpty(4), { align: 'center' })}
 
     ${canEdit ? `
-    <div id="addForm" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
-        <h2 class="text-lg font-bold text-gray-900 mb-4">Điểm danh</h2>
-        <form id="ccForm" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày <span class="text-red-500">*</span></label>
-            <input type="date" name="ngay" value="${new Date().toISOString().slice(0, 10)}" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nhân viên <span class="text-red-500">*</span></label>
-            <select name="nhan_vien_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-              ${(nvs as NhanVien[]).map(n => `<option value="${n.id}">${esc(n.ten)}</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
-            <select name="trang_thai" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-              <option value="co">Có mặt</option>
-              <option value="vang">Vắng</option>
-              <option value="nua_ngay">Nửa ngày</option>
-              <option value="phep">Phép</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
-            <input type="text" name="ghi_chu" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium cursor-pointer">Lưu</button>
-            <button type="button" onclick="hideAddForm()" class="bg-gray-200 text-gray-700 px-5 py-2 rounded-lg hover:bg-gray-300 text-sm cursor-pointer">Huỷ</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    ${modalShell({
+      id: 'addForm',
+      title: 'Điểm danh',
+      size: 'md',
+      body: `<form id="ccForm" class="space-y-4">
+          ${formGroup('Ngày', input({ type: 'date', name: 'ngay', value: new Date().toISOString().slice(0, 10), required: true }), { required: true })}
+          ${formGroup('Nhân viên', select({ name: 'nhan_vien_id', options: (nvs as NhanVien[]).map(n => `<option value="${n.id}">${esc(n.ten)}</option>`).join('') }), { required: true })}
+          ${formGroup('Trạng thái', select({ name: 'trang_thai', options: '<option value="co">Có mặt</option><option value="vang">Vắng</option><option value="nua_ngay">Nửa ngày</option><option value="phep">Phép</option>' }))}
+          ${formGroup('Ghi chú', input({ type: 'text', name: 'ghi_chu' }))}
+        </form>`,
+      footer: modalFooterInner(
+        btnSecondary('Huỷ', { onclick: 'hideAddForm()' }),
+        `<button type="submit" form="ccForm" class="btn cursor-pointer">Lưu</button>`,
+      ),
+    })}
     <script>
-    function showAddForm() { document.getElementById('addForm').classList.remove('hidden'); }
-    function hideAddForm() { document.getElementById('addForm').classList.add('hidden'); document.getElementById('ccForm').reset(); }
+    function showAddForm() { htqlOpenModal('addForm'); }
+    function hideAddForm() { htqlCloseModal('addForm'); document.getElementById('ccForm').reset(); }
     document.getElementById('ccForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -132,7 +113,7 @@ chamCongRoutes.get('/', async (c) => {
 
 chamCongRoutes.post('/api/cham-cong', async (c) => {
   const user = c.get('user');
-  const canEdit = ['admin', 'ketoanTruong', 'nhanvien'].includes(user.role);
+  const canEdit = c.get('perms').canEdit;
   if (!canEdit) return c.json({ error: 'Không có quyền' }, 403);
 
   const body = await c.req.json();

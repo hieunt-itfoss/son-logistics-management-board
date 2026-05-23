@@ -1,10 +1,20 @@
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, AppVariables } from '../types';
 import { DAU_MUC_THU_CHI } from '../types';
 import { layout } from '../utils/layout';
 import { pageHeader, card, dataTable, tableRow, tableEmpty, badge, btnPrimary } from '../utils/ui';
 
-export const thuChiRoutes = new Hono<{ Bindings: Env }>();
+export const thuChiRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+
+function denyUnlessCanEdit(c: { get: (k: 'perms') => { canEdit: boolean } }): Response | null {
+  if (!c.get('perms').canEdit) {
+    return new Response(JSON.stringify({ error: 'Không có quyền sửa' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  return null;
+}
 
 /* ───────── helpers ───────── */
 
@@ -34,6 +44,8 @@ function rangeLabel(r: string): string {
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.get('/', async (c) => {
   const user = c.get('user');
+  const perms = c.get('perms');
+  const canEdit = perms.canEdit;
   const loai = c.req.query('loai') || 'all';
   const dauMuc = c.req.query('dau_muc') || 'all';
   const range = c.req.query('range') || 'today';
@@ -93,11 +105,11 @@ thuChiRoutes.get('/', async (c) => {
         esc(String(r.ngay)),
         esc(String(r.dau_muc || '')),
         related,
-        `<span class="text-right block font-semibold text-success tabular-nums">+${fmtNum(Number(r.so_tien)||0)} ${r.tien_te}</span>`,
+        `<span class="font-semibold text-success tabular-nums">+${fmtNum(Number(r.so_tien)||0)} ${r.tien_te}</span>`,
         badge(String(r.hinh_thuc), r.hinh_thuc === 'CK' ? 'warning' : 'success'),
         `<span class="max-w-[200px] truncate inline-block">${esc(String(r.ghi_chu||''))}</span>`,
-        `<button type="button" onclick="deleteThu('${r.id}')" class="text-error hover:underline cursor-pointer text-sm">Xóa</button>`,
-      ]));
+        canEdit ? `<div class="flex justify-center"><button type="button" onclick="deleteThu('${r.id}')" class="text-error hover:underline cursor-pointer text-sm">Xóa</button></div>` : '',
+      ], { align: 'center' }));
     }
   }
 
@@ -112,11 +124,11 @@ thuChiRoutes.get('/', async (c) => {
         esc(String(r.ngay)),
         esc(String(r.dau_muc||'')),
         related,
-        `<span class="text-right block font-semibold text-error tabular-nums">−${fmtNum(Number(r.so_tien)||0)} ${r.tien_te}</span>`,
+        `<span class="font-semibold text-error tabular-nums">−${fmtNum(Number(r.so_tien)||0)} ${r.tien_te}</span>`,
         badge(String(r.hinh_thuc), r.hinh_thuc === 'CK' ? 'warning' : 'success'),
         `<span class="max-w-[200px] truncate inline-block">${esc(String(r.ghi_chu||''))}</span> ${phaiTV}`,
-        `<button type="button" onclick="deleteChi('${r.id}')" class="text-error hover:underline cursor-pointer text-sm">Xóa</button>`,
-      ]));
+        canEdit ? `<div class="flex justify-center"><button type="button" onclick="deleteChi('${r.id}')" class="text-error hover:underline cursor-pointer text-sm">Xóa</button></div>` : '',
+      ], { align: 'center' }));
     }
   }
 
@@ -130,13 +142,13 @@ thuChiRoutes.get('/', async (c) => {
   const hasFilter = loai !== 'all' || dauMuc !== 'all' || q || range !== 'today';
   const content = `
     ${pageHeader('Thu / Chi', {
-      actions: `
+      actions: canEdit ? `
         <a href="/thu-chi/thu/create" class="btn bg-success hover:bg-successemphasis text-white flex items-center gap-2">
           <iconify-icon icon="solar:add-circle-linear"></iconify-icon> Phiếu thu
         </a>
         <a href="/thu-chi/chi/create" class="btn bg-error hover:bg-erroremphasis text-white flex items-center gap-2">
           <iconify-icon icon="solar:add-circle-linear"></iconify-icon> Phiếu chi
-        </a>`,
+        </a>` : '',
     })}
 
     ${card({
@@ -178,6 +190,7 @@ thuChiRoutes.get('/', async (c) => {
     ${dataTable(
       ['Loại', 'Mã', 'Ngày', 'Đầu mục', 'Liên quan', 'Số tiền', 'HT', 'Ghi chú', ''],
       allRows.length ? allRows.join('') : tableEmpty(9, 'Không có phiếu nào phù hợp bộ lọc'),
+      { align: 'center' },
     )}
 
     <script>
@@ -201,6 +214,7 @@ thuChiRoutes.get('/', async (c) => {
    GET /thu/create — Phiếu thu form
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.get('/thu/create', async (c) => {
+  if (!c.get('perms').canEdit) return c.redirect('/thu-chi?denied=edit');
   const user = c.get('user');
 
   const { results: khachList } = await c.env.DB.prepare('SELECT id, ma_kh, ten FROM khach_hang ORDER BY ten').all();
@@ -336,6 +350,7 @@ thuChiRoutes.get('/thu/create', async (c) => {
    GET /chi/create — Phiếu chi form
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.get('/chi/create', async (c) => {
+  if (!c.get('perms').canEdit) return c.redirect('/thu-chi?denied=edit');
   const user = c.get('user');
 
   const { results: chuyenList } = await c.env.DB.prepare(
@@ -719,6 +734,8 @@ thuChiRoutes.get('/api/lo-hang-by-kh', async (c) => {
    POST /api/phieu-thu — Create phieu thu
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.post('/api/phieu-thu', async (c) => {
+  const denied = denyUnlessCanEdit(c);
+  if (denied) return denied;
   const user = c.get('user');
   const body = await c.req.json();
   const id = `PT-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
@@ -749,6 +766,8 @@ thuChiRoutes.post('/api/phieu-thu', async (c) => {
    POST /api/phieu-chi — Create phieu chi
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.post('/api/phieu-chi', async (c) => {
+  const denied = denyUnlessCanEdit(c);
+  if (denied) return denied;
   const user = c.get('user');
   const body = await c.req.json();
   const id = `PC-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
@@ -779,6 +798,8 @@ thuChiRoutes.post('/api/phieu-chi', async (c) => {
    POST /api/phieu-thu/:id/delete — Delete phieu thu
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.post('/api/phieu-thu/:id/delete', async (c) => {
+  const denied = denyUnlessCanEdit(c);
+  if (denied) return denied;
   const id = c.req.param('id');
   await c.env.DB.prepare('DELETE FROM phieu_thu WHERE id=?').bind(id).run();
   return c.json({ success: true });
@@ -788,6 +809,8 @@ thuChiRoutes.post('/api/phieu-thu/:id/delete', async (c) => {
    POST /api/phieu-chi/:id/delete — Delete phieu chi
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.post('/api/phieu-chi/:id/delete', async (c) => {
+  const denied = denyUnlessCanEdit(c);
+  if (denied) return denied;
   const id = c.req.param('id');
   await c.env.DB.prepare('DELETE FROM phieu_chi WHERE id=?').bind(id).run();
   return c.json({ success: true });

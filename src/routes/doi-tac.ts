@@ -1,7 +1,22 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { layout } from '../utils/layout';
-import { th, tableRow, tableActions, badge, badgeIcon, btnPrimary, btnDanger } from '../utils/ui';
+import {
+  th,
+  tableRow,
+  tableActions,
+  badge,
+  badgeIcon,
+  btnPrimary,
+  btnDanger,
+  btnSecondary,
+  modalShell,
+  modalFooterSplit,
+  formGroup,
+  input,
+  select,
+  textarea,
+} from '../utils/ui';
 
 export const doiTacRoutes = new Hono<{ Bindings: Env }>();
 
@@ -118,132 +133,69 @@ doiTacRoutes.get('/', async (c) => {
     ${pills}
     ${body}
 
-    <!-- Modal: Add/Edit KH -->
-    <div id="khModal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-center justify-center">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-        <div class="flex items-center justify-between px-6 py-4 border-b">
-          <h3 id="khModalTitle" class="text-lg font-semibold">Khách hàng mới</h3>
-          <button onclick="closeKhModal()" class="text-gray-400 hover:text-gray-600 text-xl cursor-pointer">✕</button>
-        </div>
-        <form id="khForm" method="POST" action="/doi-tac/api/khach-hang" class="px-6 py-4 space-y-4">
+    ${modalShell({
+      id: 'khModal',
+      title: 'Khách hàng mới',
+      titleId: 'khModalTitle',
+      size: 'lg',
+      body: `<form id="khForm" method="POST" action="/doi-tac/api/khach-hang" class="space-y-4">
           <input type="hidden" name="id" id="kh_id">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Mã KH</label>
-            <input name="ma_kh" id="kh_ma" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="VD: KH001">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tên</label>
-            <input name="ten" id="kh_ten" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          </div>
+          ${formGroup('Mã KH', input({ name: 'ma_kh', id: 'kh_ma', required: true, placeholder: 'VD: KH001' }), { required: true })}
+          ${formGroup('Tên', input({ name: 'ten', id: 'kh_ten', required: true }), { required: true })}
           <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">NIP</label>
-              <input name="nip" id="kh_nip" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Hạn TT (ngày)</label>
-              <input type="number" name="han_tt" id="kh_han" value="30" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            </div>
+            ${formGroup('NIP', input({ name: 'nip', id: 'kh_nip' }))}
+            ${formGroup('Hạn TT (ngày)', input({ type: 'number', name: 'han_tt', id: 'kh_han', value: '30' }))}
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Địa chỉ</label>
-            <input name="dia_chi" id="kh_dc" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">SĐT</label>
-            <input name="sdt" id="kh_sdt" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Đánh giá</label>
-            <select name="danh_gia" id="kh_dg" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-              <option value="">Mặc định</option>
-              <option value="binhthuong">🟡 Bình thường</option>
-              <option value="canhbao">🔴 Cảnh báo</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
-            <textarea name="ghi_chu" id="kh_ghichu" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
-          </div>
-          <div class="flex justify-between pt-2">
-            <span id="khDelBtn" class="hidden">${btnDanger('Xoá', { onclick: 'deleteKh()' })}</span>
-            <div class="flex gap-2 ml-auto">
-              <button type="button" onclick="closeKhModal()" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 cursor-pointer">Hủy</button>
-              <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer">✓ Lưu</button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
+          ${formGroup('Địa chỉ', input({ name: 'dia_chi', id: 'kh_dc' }))}
+          ${formGroup('SĐT', input({ name: 'sdt', id: 'kh_sdt' }))}
+          ${formGroup('Đánh giá', select({ name: 'danh_gia', id: 'kh_dg', options: '<option value="">Mặc định</option><option value="binhthuong">🟡 Bình thường</option><option value="canhbao">🔴 Cảnh báo</option>' }))}
+          ${formGroup('Ghi chú', textarea({ name: 'ghi_chu', id: 'kh_ghichu', rows: '2' }))}
+        </form>`,
+      footer: modalFooterSplit(
+        `<span id="khDelBtn" class="hidden">${btnDanger('Xoá', { onclick: 'deleteKh()' })}</span>`,
+        `${btnSecondary('Hủy', { onclick: 'closeKhModal()' })}<button type="submit" form="khForm" class="btn cursor-pointer">✓ Lưu</button>`,
+      ),
+    })}
 
-    <!-- Modal: Add/Edit Hãng -->
-    <div id="hangModal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-center justify-center">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
-        <div class="flex items-center justify-between px-6 py-4 border-b">
-          <h3 id="hangModalTitle" class="text-lg font-semibold">+ Hãng mới</h3>
-          <button onclick="closeHangModal()" class="text-gray-400 hover:text-gray-600 text-xl cursor-pointer">✕</button>
-        </div>
-        <form id="hangForm" method="POST" action="/doi-tac/api/hang" class="px-6 py-4 space-y-4">
+    ${modalShell({
+      id: 'hangModal',
+      title: '+ Hãng mới',
+      titleId: 'hangModalTitle',
+      size: 'lg',
+      body: `<form id="hangForm" method="POST" action="/doi-tac/api/hang" class="space-y-4">
           <input type="hidden" name="id" id="hang_id">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tên hãng</label>
-            <input name="ten" id="hang_ten" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nước</label>
-            <input name="nuoc" id="hang_nuoc" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Địa chỉ</label>
-            <input name="dia_chi" id="hang_dc" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          </div>
-          <div class="flex justify-between pt-2">
-            <span id="hangDelBtn" class="hidden">${btnDanger('Xoá', { onclick: 'deleteHang()' })}</span>
-            <div class="flex gap-2 ml-auto">
-              <button type="button" onclick="closeHangModal()" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 cursor-pointer">Hủy</button>
-              <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer">✓ Lưu</button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
+          ${formGroup('Tên hãng', input({ name: 'ten', id: 'hang_ten', required: true }), { required: true })}
+          ${formGroup('Nước', input({ name: 'nuoc', id: 'hang_nuoc' }))}
+          ${formGroup('Địa chỉ', input({ name: 'dia_chi', id: 'hang_dc' }))}
+        </form>`,
+      footer: modalFooterSplit(
+        `<span id="hangDelBtn" class="hidden">${btnDanger('Xoá', { onclick: 'deleteHang()' })}</span>`,
+        `${btnSecondary('Hủy', { onclick: 'closeHangModal()' })}<button type="submit" form="hangForm" class="btn cursor-pointer">✓ Lưu</button>`,
+      ),
+    })}
 
-    <!-- Modal: Add/Edit Cty VT -->
-    <div id="ctyModal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-center justify-center">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
-        <div class="flex items-center justify-between px-6 py-4 border-b">
-          <h3 id="ctyModalTitle" class="text-lg font-semibold">+ Cty VT mới</h3>
-          <button onclick="closeCtyModal()" class="text-gray-400 hover:text-gray-600 text-xl cursor-pointer">✕</button>
-        </div>
-        <form id="ctyForm" method="POST" action="/doi-tac/api/cty-vt" class="px-6 py-4 space-y-4">
+    ${modalShell({
+      id: 'ctyModal',
+      title: '+ Cty VT mới',
+      titleId: 'ctyModalTitle',
+      size: 'lg',
+      body: `<form id="ctyForm" method="POST" action="/doi-tac/api/cty-vt" class="space-y-4">
           <input type="hidden" name="id" id="cty_id">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tên công ty</label>
-            <input name="ten" id="cty_ten" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Địa chỉ</label>
-            <input name="dia_chi" id="cty_dc" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">SĐT</label>
-            <input name="sdt" id="cty_sdt" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          </div>
-          <div class="flex justify-between pt-2">
-            <span id="ctyDelBtn" class="hidden">${btnDanger('Xoá', { onclick: 'deleteCty()' })}</span>
-            <div class="flex gap-2 ml-auto">
-              <button type="button" onclick="closeCtyModal()" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 cursor-pointer">Hủy</button>
-              <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer">✓ Lưu</button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
+          ${formGroup('Tên công ty', input({ name: 'ten', id: 'cty_ten', required: true }), { required: true })}
+          ${formGroup('Địa chỉ', input({ name: 'dia_chi', id: 'cty_dc' }))}
+          ${formGroup('SĐT', input({ name: 'sdt', id: 'cty_sdt' }))}
+        </form>`,
+      footer: modalFooterSplit(
+        `<span id="ctyDelBtn" class="hidden">${btnDanger('Xoá', { onclick: 'deleteCty()' })}</span>`,
+        `${btnSecondary('Hủy', { onclick: 'closeCtyModal()' })}<button type="submit" form="ctyForm" class="btn cursor-pointer">✓ Lưu</button>`,
+      ),
+    })}
 
     <script>
     // ── KH Modal ──
     function openKhModal(id) {
       const m = document.getElementById('khModal');
+      if (!m) return;
       if (id) {
         document.getElementById('khModalTitle').textContent = 'Sửa khách hàng';
         document.getElementById('khDelBtn').classList.remove('hidden');
@@ -265,9 +217,9 @@ doiTacRoutes.get('/', async (c) => {
         document.getElementById('khForm').reset();
         document.getElementById('kh_id').value = '';
       }
-      m.classList.remove('hidden');
+      htqlOpenModal('khModal');
     }
-    function closeKhModal() { document.getElementById('khModal').classList.add('hidden'); }
+    function closeKhModal() { htqlCloseModal('khModal'); }
     function deleteKh() {
       const id = document.getElementById('kh_id').value;
       if (!id || !confirm('Xoá khách hàng này?')) return;
@@ -295,9 +247,9 @@ doiTacRoutes.get('/', async (c) => {
         document.getElementById('hangForm').reset();
         document.getElementById('hang_id').value = '';
       }
-      m.classList.remove('hidden');
+      htqlOpenModal('hangModal');
     }
-    function closeHangModal() { document.getElementById('hangModal').classList.add('hidden'); }
+    function closeHangModal() { htqlCloseModal('hangModal'); }
     function deleteHang() {
       const id = document.getElementById('hang_id').value;
       if (!id || !confirm('Xoá hãng này?')) return;
@@ -325,9 +277,9 @@ doiTacRoutes.get('/', async (c) => {
         document.getElementById('ctyForm').reset();
         document.getElementById('cty_id').value = '';
       }
-      m.classList.remove('hidden');
+      htqlOpenModal('ctyModal');
     }
-    function closeCtyModal() { document.getElementById('ctyModal').classList.add('hidden'); }
+    function closeCtyModal() { htqlCloseModal('ctyModal'); }
     function deleteCty() {
       const id = document.getElementById('cty_id').value;
       if (!id || !confirm('Xoá công ty VT này?')) return;
@@ -337,12 +289,6 @@ doiTacRoutes.get('/', async (c) => {
       });
     }
 
-    // Close modals on backdrop click
-    ['khModal','hangModal','ctyModal'].forEach(mid => {
-      document.getElementById(mid).addEventListener('click', e => {
-        if (e.target.id === mid) document.getElementById(mid).classList.add('hidden');
-      });
-    });
     </script>
   `;
 

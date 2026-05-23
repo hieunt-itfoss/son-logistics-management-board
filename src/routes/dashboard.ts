@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, AppVariables } from '../types';
 import { layout } from '../utils/layout';
 import { kpiCard, panelCard, th } from '../utils/ui';
 import { computeReceivables, computeFundBalance, computePayablesVT } from '../utils/finance';
 
-export const dashboardRoutes = new Hono<{ Bindings: Env }>();
+export const dashboardRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
 const TT_LABEL: Record<string, string> = {
   planned: 'Kế hoạch',
@@ -15,6 +15,8 @@ const TT_LABEL: Record<string, string> = {
 
 dashboardRoutes.get('/', async (c) => {
   const user = c.get('user');
+  const perms = c.get('perms');
+  const showProfit = perms.canViewLoiNhuan;
 
   const compactTable = (headers: string, tbodyId: string, colspan: number) =>
     `<div class="overflow-x-auto -mx-1"><table class="htql-table htql-table--compact min-w-full w-full">
@@ -32,12 +34,12 @@ dashboardRoutes.get('/', async (c) => {
           icon: 'solar:wallet-money-bold-duotone',
           hintHtml: 'Thu tiền: <span id="stat-collected-today">-</span>',
         })}
-        ${kpiCard('Lợi nhuận tháng', '-', {
+        ${showProfit ? kpiCard('Lợi nhuận tháng', '-', {
           id: 'stat-profit-month',
           tone: 'success',
           icon: 'solar:chart-2-bold-duotone',
           hintHtml: 'Thu − Chi tháng này',
-        })}
+        }) : ''}
         ${kpiCard('Tồn quỹ', '-', {
           id: 'stat-fund',
           tone: 'info',
@@ -68,10 +70,8 @@ dashboardRoutes.get('/', async (c) => {
         </div>
       </div>
 
-      <div class="htql-dash-grid-2">
-        <div>
-          ${panelCard({ title: 'Lợi nhuận theo tháng', body: '<div id="chart-profit-month"></div>' })}
-        </div>
+      <div class="${showProfit ? 'htql-dash-grid-2' : ''}">
+        ${showProfit ? `<div>${panelCard({ title: 'Lợi nhuận theo tháng', body: '<div id="chart-profit-month"></div>' })}</div>` : ''}
         <div>
           ${panelCard({ title: 'Doanh thu VT theo tuyến', body: '<div id="chart-revenue-route"></div>' })}
         </div>
@@ -189,15 +189,17 @@ dashboardRoutes.get('/', async (c) => {
 
         setText('stat-revenue-today', fmtCcy(s.revenueTodayVT));
         setText('stat-collected-today', fmtCcy(s.collectedToday));
-        setText('stat-profit-month', fmtCcy(s.profitMonth));
-        setText('stat-fund', fmtCcy(s.fundBalance));
+        if (data.canViewLoiNhuan) {
+          setText('stat-profit-month', fmtCcy(s.profitMonth));
+          setText('stat-fund', fmtCcy(s.fundBalance));
+        }
         setText('stat-receivable', fmtCcy(s.receivable));
         setText('stat-overdue', String(s.overdueCustomers||0));
         setText('stat-active-trips', String(s.activeTrips||0));
 
         setText('ops-cargo', fmtNum(s.cargoBatches));
         setText('ops-warehouse', fmtNum(s.warehouseItems));
-        setText('ops-payable-vt', fmtCcy(s.payableVT));
+        if (data.canViewLoiNhuan) setText('ops-payable-vt', fmtCcy(s.payableVT));
         setText('ops-customers', fmtNum(s.customers));
 
         var activeTrips = data.activeTrips || [];
@@ -252,9 +254,10 @@ dashboardRoutes.get('/', async (c) => {
           yaxis: { labels: { formatter: function(v){ return fmtNum(v); } } }
         }));
 
-        var pm = data.profitByMonth || [];
+        var pm = data.canViewLoiNhuan ? (data.profitByMonth || []) : [];
         var pmEl = document.getElementById('chart-profit-month');
-        if (!pm.length) showEmpty(pmEl, 'Chưa có dữ liệu lợi nhuận');
+        if (!pmEl) { /* hidden for role */ }
+        else if (!pm.length) showEmpty(pmEl, 'Chưa có dữ liệu lợi nhuận');
         else renderChart(pmEl, Object.assign({}, chartOpts, {
           chart: { type: 'bar', height: chartH.side, toolbar: { show: false }, fontFamily: 'inherit' },
           series: [{ name: 'Lợi nhuận (PLN)', data: pm.map(function(d){ return d.profitPLN; }) }],
@@ -330,6 +333,7 @@ dashboardRoutes.get('/', async (c) => {
 dashboardRoutes.get('/dashboard', async (c) => c.redirect('/'));
 
 dashboardRoutes.get('/api/dashboard/analytics', async (c) => {
+  const perms = c.get('perms');
   const db = c.env.DB;
 
   const [
@@ -496,6 +500,7 @@ dashboardRoutes.get('/api/dashboard/analytics', async (c) => {
   }));
 
   return c.json({
+    canViewLoiNhuan: perms.canViewLoiNhuan,
     summary: {
       customers: customers?.c ?? 0,
       activeTrips: activeTripsCount?.c ?? 0,
@@ -503,14 +508,14 @@ dashboardRoutes.get('/api/dashboard/analytics', async (c) => {
       warehouseItems: warehouseItems?.c ?? 0,
       revenueTodayVT: revenueTodayVTMap,
       collectedToday: collectedTodayMap,
-      profitMonth,
-      fundBalance,
+      profitMonth: perms.canViewLoiNhuan ? profitMonth : {},
+      fundBalance: perms.canViewLoiNhuan ? fundBalance : {},
       receivable: receivables.totalByCcy,
       overdueCustomers: receivables.overdueCount,
-      payableVT: payablesVT,
+      payableVT: perms.canViewLoiNhuan ? payablesVT : {},
     },
     thuChiByMonth,
-    profitByMonth,
+    profitByMonth: perms.canViewLoiNhuan ? profitByMonth : [],
     revenueVsExpenses,
     revenueByRoute: revenueByRoute.results,
     tripStatus,

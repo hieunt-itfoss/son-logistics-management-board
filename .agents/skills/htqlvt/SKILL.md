@@ -2,16 +2,19 @@
 
 ## Overview
 
-Vietnamese transport management system (Hệ thống Quản lý Vận tải) for Son Logistics. Manages customers, suppliers, routes, vehicles, drivers, and trips. Runs entirely on Cloudflare Workers with D1 (SQLite) and server-side rendered HTML.
+Vietnamese transport management system (Hệ thống Quản lý Vận tải) for Son Logistics. Manages customers, suppliers, routes, vehicles, drivers, trips, cargo batches, warehouse, income/expense, and staff. Runs entirely on Cloudflare Workers with D1 (SQLite) and server-side rendered HTML.
+
+**Canonical references:** `AGENTS.md` (project map), `DESIGN.md` (UI/design system), `src/routes/AGENTS.md` (routes).
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Runtime | Cloudflare Workers (`compatibility_date: 2026-05-18`, `nodejs_compat`) |
-| Framework | Hono v4 (`hono`) - web framework with typed context |
+| Framework | Hono v4 (`hono`) — typed context |
 | Database | Cloudflare D1 (SQLite) via `wrangler` migrations |
-| UI | Tailwind CSS v4 + custom theme CSS, plain HTML SSR (no React/JSX) |
+| UI | TailwindAdmin layout + Tailwind CSS v4 + `theme.css`, plain HTML SSR (no React/JSX) |
+| Icons | Iconify Solar (`iconify-icon`) |
 | Auth | Session-based, HMAC-SHA256 password hashing, HTTP-only cookies |
 | Build | Wrangler CLI v4 |
 | Test | Vitest v4 |
@@ -22,153 +25,49 @@ Vietnamese transport management system (Hệ thống Quản lý Vận tải) for
 ```
 he-thong-quan-ly/
 ├── src/
-│   ├── index.ts              # Hono app entry, route mounting, health check
-│   ├── types.ts              # TypeScript interfaces (Env, User, Session, entities)
+│   ├── index.ts              # Hono app entry, route mounting (11 tabs)
+│   ├── types.ts              # Interfaces, 6-role type, constants
 │   ├── middleware/
-│   │   └── auth.ts           # Session auth middleware, password hashing, cookie utils
-│   ├── routes/
-│   │   ├── auth.ts           # Login/logout (public)
-│   │   ├── dashboard.ts      # Dashboard page + /api/dashboard/stats
-│   │   ├── khach-hang.ts     # Customers CRUD
-│   │   ├── hang.ts           # Suppliers CRUD
-│   │   ├── tuyen.ts          # Routes CRUD
-│   │   ├── xe.ts             # Vehicles CRUD
-│   │   ├── tai-xe.ts         # Drivers CRUD
-│   │   └── chuyen-xe.ts      # Trips CRUD
+│   │   └── auth.ts           # HMAC-SHA256 sessions, 6-role permissions
+│   ├── routes/               # 12 route files (see src/routes/AGENTS.md)
 │   ├── db/
-│   │   ├── migrations/
-│   │   │   └── 0001_initial_schema.sql
-│   │   └── seed.sql          # Seed data (admin user, sample routes/suppliers/vehicles/drivers/customers)
+│   │   ├── migrations/       # SQL migrations
+│   │   └── seed.sql
 │   └── utils/
-│       └── index.ts          # formatDate, formatCurrency, generateEntityId, generateMaChuyen
-├── public/
-│   └── assets/
-│       ├── tailwind/tailwind.css
-│       ├── css/theme.css
-│       ├── js/
-│       ├── fonts/
-│       └── images/
-├── views/                    # (empty - placeholder for future templates)
-├── wrangler.jsonc            # Workers config, D1 binding, assets
-├── tsconfig.json
-├── vitest.config.ts
-└── package.json
+│       ├── layout.ts         # TailwindAdmin shell: sidebar, topbar, role nav
+│       └── ui.ts             # SSR UI helpers — see Design System below
+├── DESIGN.md                 # Full design system doc
+├── public/assets/
+│   ├── tailwind/tailwind.css # Compiled CSS (run npm run build:css after edits)
+│   ├── css/theme.css         # HTQLVT tokens + table overrides
+│   └── js/                   # Sidebar/theme JS
+└── wrangler.jsonc
 ```
-
-## D1 Database Schema
-
-Binding name: `DB` (accessed via `c.env.DB`)
-
-### Tables
-
-| Table | Vietnamese | Purpose | Key Fields |
-|-------|-----------|---------|------------|
-| `users` | - | Auth & authorization | id, username, password_hash, display_name, role, active |
-| `sessions` | - | Session tokens | id, user_id, token, expires_at |
-| `khach_hang` | Khách hàng | Customers | id, ma_kh (unique), ten, nip, dia_chi, sdt, han_tt, ghi_chu, danh_gia |
-| `hang` | Hãng | Suppliers | id, ten, nuoc, dia_chi |
-| `tuyen` | Tuyến | Routes | id, ten, diem_di, diem_den, tien_to, khoang_cach_km |
-| `xe` | Xe | Vehicles | id, bien_so (unique), so_xe, loai_xe, trong_tai |
-| `tai_xe` | Tài xế | Drivers | id, ten, sdt, cmnd, ghi_chu |
-| `chuyen_xe` | Chuyến xe | Trips | id, tuyen_id→tuyen, xe_id→xe, tai_xe_id→tai_xe, ngay_di, ngay_den, trang_thai, ghi_chu |
-
-### Key Constraints
-- All IDs are TEXT (generated: `{prefix}-{timestamp36}-{random6}`)
-- `users.role`: `admin | ke_toan | tai_xe | kho`
-- `chuyen_xe.trang_thai`: `planned | dang_chay | hoan_thanh | huy`
-- `khach_hang.danh_gia`: `` | `binhthuong` | `canhbao`
-- Timestamps: `created_at`, `updated_at` default to `datetime('now')`
-- Indexes on: sessions(token), sessions(user_id), chuyen_xe(tuyen_id), chuyen_xe(ngay_di)
-
-### Hono Context VariableMap
-```typescript
-declare module 'hono' {
-  interface ContextVariableMap {
-    user: User;
-    session: Session;
-  }
-}
-```
-Access via `c.get('user')` and `c.get('session')` in protected routes.
-
-## Authentication
-
-- **Session mechanism**: Token stored in HTTP-only cookie (`session_token`), checked against `sessions` table
-- **Password hashing**: HMAC-SHA256 using `SESSION_SECRET` env var. Auto-upgrades plaintext passwords on first login.
-- **Session duration**: 24 hours
-- **Cookie flags**: HttpOnly, Secure (when deployed), SameSite=Strict
-- **Auth also via header**: `Authorization: Bearer <token>` for API access
-- **Default credentials**: admin / admin123 (stored plaintext in seed, auto-hashed on first login)
-
-### Role Permissions
-```typescript
-admin:   ['dashboard', 'khach-hang', 'hang', 'tuyen', 'xe', 'tai-xe', 'chuyen-xe', 'users']
-ke_toan: ['dashboard', 'khach-hang', 'hang', 'chuyen-xe']
-tai_xe:  ['dashboard', 'chuyen-xe']
-kho:     ['dashboard', 'kho']
-```
-
-### Route Protection
-- Public: `/health`, `/login`, `/api/auth/login`, `/api/auth/logout`
-- All other routes: protected by `authMiddleware` → redirects to `/login` (HTML) or returns 401 (API)
 
 ## Code Conventions
 
 ### NO React/JSX
-All UI is rendered as HTML string template literals returned via `c.html()`. Each route file has its own `layout()` function.
+All UI is HTML string template literals returned via `c.html()`.
 
-### Route File Pattern
-Every route file follows this exact structure:
+### Shared layout (do NOT duplicate per route)
+Import `layout` from `../utils/layout` and UI helpers from `../utils/ui`:
 
 ```typescript
 import { Hono } from 'hono';
-import type { Env, EntityType } from '../types';
+import type { Env } from '../types';
+import { layout } from '../utils/layout';
+import { pageHeader, card, dataTable, btnPrimary, formGroup, input } from '../utils/ui';
 
-export const entityRoutes = new Hono<{ Bindings: Env }>();
+export const fooRoutes = new Hono<{ Bindings: Env }>();
 
-function layout(title: string, content: string, user: any): string {
-  return `<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} - HTQLVT</title>
-  <link rel="stylesheet" href="/assets/tailwind/tailwind.css">
-  <link rel="stylesheet" href="/assets/css/theme.css">
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <nav><!-- shared nav bar with active page highlighted --></nav>
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${content}</main>
-</body>
-</html>`;
-}
-
-// Page route (SSR HTML)
-entityRoutes.get('/', async (c) => {
+fooRoutes.get('/', async (c) => {
   const user = c.get('user');
-  // D1 query, build HTML, return c.html(layout(...))
+  const content = pageHeader('Tiêu đề', { actions: btnPrimary('Thêm', { icon: 'solar:add-circle-linear', onclick: '...' }) });
+  return c.html(layout('Tiêu đề', content, user, 'foo'));
 });
-
-// API routes (JSON)
-entityRoutes.get('/api/entity', ...);
-entityRoutes.post('/api/entity', ...);
-entityRoutes.put('/api/entity/:id', ...);
-entityRoutes.delete('/api/entity/:id', ...);
 ```
 
-### Route Mounting (index.ts)
-```typescript
-const app = new Hono<{ Bindings: Env }>();
-app.get('/health', (c) => c.json({ status: 'ok' }));
-app.route('/', authRoutes);  // public
-const protectedApp = new Hono<{ Bindings: Env }>();
-protectedApp.use('*', authMiddleware);
-protectedApp.route('/', dashboardRoutes);
-protectedApp.route('/khach-hang', khachHangRoutes);
-// ... more routes
-app.route('/', protectedApp);
-export default app;
-```
+Mount in `src/index.ts`: `protectedApp.route('/foo', fooRoutes)`. Add nav item to `ALL_NAV_ITEMS` in `layout.ts` with `roles`.
 
 ### D1 Query Pattern
 Always use prepared statements with `.bind()`:
@@ -178,116 +77,276 @@ const row = await c.env.DB.prepare('SELECT * FROM table WHERE id = ?').bind(id).
 await c.env.DB.prepare('INSERT INTO table (col1, col2) VALUES (?, ?)').bind(val1, val2).run();
 ```
 
-### ID Generation
-```typescript
-const id = `prefix-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
-```
-Prefix conventions: `USR-`, `SES-`, `kh-`, `h-`, `t-`, `x-`, `tx-`, `cx-`
-
-### Nav Bar
-Each route file has its own copy of the `layout()` function with the nav bar. The active page is highlighted with `text-blue-700 font-semibold` class while others use `text-gray-600 hover:text-gray-900`.
+### HTML escaping
+Always escape user data before embedding in templates. Use local `esc()` or equivalent in route files.
 
 ### Frontend JS
-Inline `<script>` tags at the end of page content. Uses vanilla JS with `fetch()` API calls. Pattern: show/hide form, submit via fetch, `location.reload()` on success.
+Inline `<script>` at end of page content. Vanilla JS + `fetch()`, `location.reload()` on success.
+
+## Authentication
+
+- Session cookie via middleware helpers (`setSessionCookie` / `clearSessionCookie`) — never construct cookie strings manually
+- Password: HMAC-SHA256 with `SESSION_SECRET`; auto-upgrades plaintext on first login
+- **6 roles:** `admin`, `ketoanTruong`, `ketoanVien`, `nhanvien`, `kho`, `laixe`
+- Access: `const user = c.get('user')` in protected routes
 
 ## Development Workflow
 
 ```bash
-# Install dependencies
 npm install
-
-# Local development (Wrangler dev server)
-npm run dev
-
-# Run tests
+npm run dev                    # Local dev server
 npm test
-
-# Apply D1 migrations locally
-npm run db:migrate:local
-# Equivalent: wrangler d1 migrations apply DB --local
-
-# Apply D1 migrations to production
-npm run db:migrate:remote
-# Equivalent: wrangler d1 migrations apply DB --remote
-
-# Seed local database
-npm run db:seed
-# Equivalent: wrangler d1 execute DB --local --file=src/db/seed.sql
-
-# Deploy to Cloudflare
-npm run deploy
-
-# Generate Worker types
-npm run types
+npm run build:css              # After editing tailwind.input.css
+npx wrangler d1 migrations apply he-thong-quan-ly-db --local
+npx wrangler d1 execute he-thong-quan-ly-db --local --file src/db/seed.sql
+npx wrangler deploy --dry-run  # Required before commit
+npx wrangler deploy
 ```
 
-### First-Time Setup
+Default login: `admin` / `admin123`
+
+## Anti-Patterns
+
+- **NEVER** reference `tai_xe` table in UI — use `nhan_vien WHERE vai_tro = 'laixe'`
+- **NEVER** duplicate `layout()` per route — use `src/utils/layout.ts`
+- **NEVER** use React/JSX or `cdn.tailwindcss.com`
+- **NEVER** use `as any`, `@ts-ignore`, `@ts-expect-error`
+- **NEVER** use Node.js `crypto` — use Web Crypto in Workers runtime
+- **NEVER** use `INSERT OR REPLACE` for upserts — use `INSERT OR IGNORE` (FK-safe)
+
+---
+
+## Design System
+
+> **Stack:** TailwindAdmin layout + Tatem-inspired tokens. SSR HTML only (no React).
+> **Source:** `DESIGN.md` — read for full detail when building UI.
+
+**Template:** [TailwindAdmin React](https://react.tailwind-admin.com/) — vertical sidebar, fixed topbar, `card` / `btn` / `form-control` utilities from `public/assets/tailwind/tailwind.css`.
+
+**Visual direction:** [Tatem on Refero](https://styles.refero.design/style/cb6e4ab0-b8fe-45b0-bd22-6339b073e26d) — midnight-terminal clarity, restrained blue accent, Inter typography, comfortable spacing.
+
+**Theme default:** light + `Blue_Theme`. Dark mode via `data-theme="dark"` on `<html>` (toggle in header).
+
+### Design File Map
+
+| Purpose | Path |
+|---------|------|
+| App shell (sidebar, header) | `src/utils/layout.ts` |
+| Reusable HTML fragments | `src/utils/ui.ts` |
+| TailwindAdmin source | `public/assets/tailwind/tailwind.input.css` |
+| Compiled CSS (browser) | `public/assets/tailwind/tailwind.css` — run `npm run build:css` after editing source |
+| HTQLVT overrides (font, tokens) | `public/assets/css/theme.css` |
+| Sidebar/theme JS | `public/assets/js/app.init.js`, `app.min.js`, `theme.js` |
+| Icons | Iconify Solar (`iconify-icon`) |
+
+### Layout Shell (TailwindAdmin)
+
+Every authenticated page uses `layout(title, content, user, activePageId)` from `src/utils/layout.ts`.
+
+```html
+<html lang="vi" dir="ltr"
+  data-color-theme="Blue_Theme"
+  data-layout="vertical"
+  data-sidebartype="full"
+  data-card="border"
+  data-header-position="fixed">
+<body>
+  <aside class="left-sidebar ...">  <!-- 270px, role-filtered nav -->
+  <div class="page-wrapper">
+    <header class="topbar app-header">  <!-- page title, user, theme toggle -->
+    <div class="body-wrapper">
+      <div class="container py-6">  <!-- page content -->
+```
+
+**Do not** duplicate `layout()` per route. **Do not** load `cdn.tailwindcss.com` — use compiled `/assets/tailwind/tailwind.css` only.
+
+After changing `tailwind.input.css` or utilities under `public/assets/tailwind/`:
+
 ```bash
-npm install
-npm run db:migrate:local
-npm run db:seed
-npm run dev
-# Open http://localhost:8787, login with admin / admin123
+npm run build:css
 ```
 
-## Adding a New Entity (Step-by-Step)
+### Tokens — Colors
 
-### 1. Add D1 Migration
-Create `src/db/migrations/NNNN_entity_name.sql`:
-```sql
-CREATE TABLE IF NOT EXISTS entity_name (
-  id TEXT PRIMARY KEY,
-  field1 TEXT NOT NULL,
-  field2 TEXT DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+#### TailwindAdmin (primary UI)
+
+| Token | Role |
+|-------|------|
+| `--primary` | Buttons, active sidebar, links |
+| `--secondary` | Secondary actions |
+| `--info` / `--success` / `--warning` / `--error` | Status, alerts |
+| `--border` / `--bordergray` | Card borders, inputs |
+| `--bodytext` / `--link` | Body copy, nav text |
+| `--dark` | Headings (light mode) |
+
+Set via `data-color-theme="Blue_Theme"` on `<html>`.
+
+#### HTQLVT semantic (Tatem-inspired, in `theme.css`)
+
+| Name | Value | CSS variable | Role |
+|------|-------|--------------|------|
+| Cerulean Accent | `#007eed` | `--htql-accent` | KPI highlights, chart series |
+| Twilight Ink | `#0f1419` | `--htql-ink` | Dark mode page bg |
+| Polar White | `#ffffff` | `--htql-surface` | Cards (light) |
+| Pewter Mist | `#919191` | `--htql-muted` | Secondary labels |
+| Charcoal Panel | `#3b3b3b` | `--htql-panel` | Dark mode cards |
+
+### Tokens — Typography
+
+- **Font:** Inter (`--theme-font` in `theme.css`), fallback `system-ui, sans-serif`
+- **Scale:** TailwindAdmin utilities — `card-title` (18px semibold), body `text-sm` (14px)
+- **Headings in pages:** use `pageHeader()` from `ui.ts`
+- **Vietnamese:** `lang="vi"` on `<html>`, `toLocaleString('vi-VN')` for numbers
+
+| Role | Classes |
+|------|---------|
+| Page title | `text-xl font-semibold text-dark dark:text-white` |
+| Card title | `card-title` |
+| Card subtitle | `card-subtitle` |
+| Table header | `caption` or `text-xs uppercase text-link` |
+| Muted hint | `text-xs text-bodytext dark:text-darklink` |
+
+### Tokens — Spacing & Shape
+
+| Element | Value |
+|---------|-------|
+| Sidebar width | 270px |
+| Card padding | `card-body` → 30px |
+| Section gap | `mb-6` between blocks |
+| Input/button radius | `rounded-md` (7px theme) |
+| Container | `container` → max 1536px, px-5 |
+
+### UI Components (`src/utils/ui.ts`)
+
+#### Page header
+```ts
+pageHeader('Tuyến vận tải', {
+  subtitle: 'Quản lý tuyến theo nhóm đầu mục VT',
+  actions: btnPrimary('Tuyến mới', { icon: 'solar:add-circle-linear', onclick: 'showAddForm()' }),
+});
 ```
-Apply: `npm run db:migrate:local`
 
-### 2. Add TypeScript Interface
-In `src/types.ts`:
-```typescript
-export interface EntityName {
-  id: string;
-  field1: string;
-  field2: string;
-  created_at: string;
-  updated_at: string;
-}
+#### Card
+```ts
+card({ title: 'Danh sách', body: tableHtml });
+card({ body: formHtml }); // no title
+```
+Classes: `card` + optional `card-body`, `card-title`, `card-subtitle`.
+
+#### Stat card (dashboard)
+```ts
+statCard('Khách hàng', '-', { id: 'stat-customers', href: '/doi-tac', hint: 'Xem danh sách →' });
 ```
 
-### 3. Create Route File
-Create `src/routes/entity-name.ts` following the route file pattern above.
+#### Table
+```ts
+dataTable(['Mã', 'Tên', ...], rowsHtml);
+dataTable(headers, rows, { align: 'center' }); // optional column alignment
+tableRow(cells, { align: 'center' });
+tableActions(editOnclick, deleteOnclick, permOnclick, { center: true });
+tableEmpty(colspan, message);
+th('Label', { align: 'right' });
+```
+Wraps table in `card` with `overflow-x-auto`. Table class: `htql-table`. Action buttons: `htql-table-action`.
 
-### 4. Mount Route
-In `src/index.ts`:
-```typescript
-import { entityNameRoutes } from './routes/entity-name';
-// Add inside protectedApp:
-protectedApp.route('/entity-name', entityNameRoutes);
+#### Forms
+```ts
+formGroup('Tên tuyến', input({ name: 'ten', required: true }));
+select({ name: 'dau_muc_group', options: [...] });
+```
+Inputs use `form-control` class (TailwindAdmin).
+
+#### Buttons
+
+| Helper | Class |
+|--------|-------|
+| `btnPrimary('Lưu')` | `btn` |
+| `btnSecondary('Hủy')` | `btn-outline border-bordergray` |
+| `btnDanger('Xóa')` | `btn-error` |
+| `btnLightPrimary(...)` | `btn-light-primary` |
+
+#### Alerts & badges
+```ts
+alert('error', 'Tên đăng nhập hoặc mật khẩu không đúng.');
+badge('Đang chạy', 'success'); // primary | success | warning | error | neutral
 ```
 
-### 5. Update Navigation
-Add the new nav link to every route file's `layout()` function (or consider extracting to a shared layout).
+### Page Patterns
 
-## Environment Variables
+#### List + inline form (CRUD)
+1. `pageHeader` with primary action
+2. Hidden `#addForm` → `card({ title: 'Thêm mới', body: form })`
+3. `dataTable(...)` for list
+4. Vanilla `fetch` to `/api/...`, `location.reload()` on success
 
-| Variable | Where | Purpose |
-|----------|-------|---------|
-| `SESSION_SECRET` | `wrangler.jsonc` vars | HMAC-SHA256 key for password hashing |
-| `APP_NAME` | `wrangler.jsonc` vars | Display name: "Hệ thống quản lý vận tải" |
+#### Dashboard
+1. Row of `statCard` (grid `grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6`)
+2. Chart cards: `card({ title, body: '<div id="chart-..."></div>' })`
+3. ApexCharts CDN in content only on dashboard
 
-For production, set `SESSION_SECRET` via `wrangler secret put SESSION_SECRET`.
+#### Login (no layout)
+Split panel: brand left (`lg:w-[55%]`, primary gradient), form right. Use `form-control`, `btn`, `card` classes. File: `src/routes/auth.ts`.
 
-## Wrangler Configuration (wrangler.jsonc)
+#### Toolbar with search (doi-tac pattern)
+Single row: primary button left, filters/search right (`flex-nowrap`, `justify-end`). Search input: `type="text"` (not `search` — avoids browser clear button), icon submit button inside relative wrapper.
 
-- **name**: `he-thong-quan-ly`
-- **main**: `src/index.ts`
-- **compatibility_date**: `2026-05-18`
-- **compatibility_flags**: `["nodejs_compat"]`
-- **assets.directory**: `./public` (serves static files from public/)
-- **d1_databases**: binding `DB`, database `he-thong-quan-ly-db`, migrations from `src/db/migrations`
+### Icons
+
+Use Iconify Solar line icons:
+```html
+<iconify-icon icon="solar:bus-2-linear" class="text-xl"></iconify-icon>
+```
+Load: `https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js`
+
+### Dark Mode
+
+- Toggle sets `document.documentElement.setAttribute('data-theme', 'dark'|'light')`
+- TailwindAdmin: `dark:` variants + `dark.css`
+- Persist in `localStorage` key `htqlvt-theme`
+- Login page: light only
+
+### Design Do's and Don'ts
+
+#### Do
+- Import `layout` from `../utils/layout` and UI helpers from `../utils/ui`
+- Escape user strings with `esc()` before embedding in HTML
+- Use `card`, `btn`, `form-control` utilities from tailwind.css
+- Keep sidebar nav in `ALL_NAV_ITEMS` with `roles` array
+- Use `activePage` id matching nav `id` field
+
+#### Don't
+- Don't add React/JSX or `cdn.tailwindcss.com`
+- Don't create per-route `layout()` copies
+- Don't use heavy box-shadows; prefer `data-card="border"` (bordered cards)
+- Don't introduce colors outside primary palette + semantic status colors
+- Don't use `tai_xe` table name in UI labels (use Nhân viên / Lái xe)
+
+### Agent Prompt — New List Page
+
+```
+Create src/routes/foo.ts following tuyen.ts:
+- import { layout } from '../utils/layout'
+- import { pageHeader, card, dataTable, btnPrimary, formGroup, input } from '../utils/ui'
+- return c.html(layout('Tiêu đề', content, user, 'foo'))
+- Mount in index.ts as protectedApp.route('/foo', fooRoutes)
+- Add nav item to ALL_NAV_ITEMS in layout.ts with roles
+```
+
+### Quick Color Reference
+
+- Text primary: `text-dark dark:text-white`
+- Text muted: `text-bodytext` / `text-link`
+- Background page: `bg-lightgray` (body default via theme)
+- CTA: `btn` (primary)
+- Accent KPI: `#007eed` / `text-primary`
+
+### Visual References
+
+- **TailwindAdmin** — sidebar + card dashboard structure
+- **Tatem** — dark terminal restraint, single blue accent
+- **Linear / Supabase dark** — data-dense tables, minimal chrome
+
+---
 
 ## Key Business Terms (Vietnamese-English)
 
@@ -297,25 +356,19 @@ For production, set `SESSION_SECRET` via `wrangler secret put SESSION_SECRET`.
 | Hãng | Supplier/Carrier | `hang` |
 | Tuyến | Route | `tuyen` |
 | Xe | Vehicle | `xe` |
-| Tài xế | Driver | `tai_xe` |
+| Nhân viên / Lái xe | Staff / Driver | `nhan_vien` |
 | Chuyến xe | Trip | `chuyen_xe` |
-| Lô hàng | Cargo batch | (planned) |
-| Phiếu thu | Receipt/Income | (planned) |
-| Phiếu chi | Expense | (planned) |
-| Kho | Warehouse | (planned) |
-| Điểm đi | Departure point | `tuyen.diem_di` |
-| Điểm đến | Destination | `tuyen.diem_den` |
+| Lô hàng | Cargo batch | `lo_hang` |
+| Phiếu thu / chi | Receipt / Expense | `thu_chi` |
+| Kho | Warehouse | `kho` |
+| Điểm đi / đến | Departure / Destination | `tuyen.diem_di` / `diem_den` |
 | Biển số | License plate | `xe.bien_so` |
-| Trọng tải | Load capacity | `xe.trong_tai` |
 | Hạn thanh toán | Payment term (days) | `khach_hang.han_tt` |
-| Đánh giá | Rating | `khach_hang.danh_gia` |
-| Kế hoạch / Đang chạy / Hoàn thành / Hủy | Planned / Running / Completed / Cancelled | `chuyen_xe.trang_thai` |
+| Đánh giá | Rating | `khach_hang.danh_gia` (`''`, `binhthuong`, `canhbao` only) |
 
-## Known Patterns & Caveats
+## Environment Variables
 
-- **Layout duplication**: Each route file has its own `layout()` function with duplicated nav. When adding nav items, update ALL route files.
-- **views/ directory**: Exists but empty. HTML templates live inline in route files.
-- **No shared layout module**: Consider extracting if the project grows.
-- **services/ directory**: Exists but empty. Business logic is inline in routes.
-- **Planned features**: `kho` (warehouse), `lo-hang` (cargo batches), `thu-chi` (income/expense) are mentioned in role permissions but not yet implemented as routes.
-- **Edit pattern**: Edit forms reuse the add form by fetching all records client-side and filtering by ID. Could be optimized with dedicated GET /api/entity/:id endpoints.
+| Variable | Where | Purpose |
+|----------|-------|---------|
+| `SESSION_SECRET` | `wrangler.jsonc` vars / secret | HMAC-SHA256 key for password hashing |
+| `APP_NAME` | `wrangler.jsonc` vars | Display name |

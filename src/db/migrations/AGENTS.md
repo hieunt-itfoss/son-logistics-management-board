@@ -9,6 +9,7 @@
 | `0002_phase2_tables.sql` | Phase 2 additions |
 | `0003_full_schema.sql` | nhan_vien (replaces tai_xe), cty_van_tai, bang_gia, cham_cong, audit_log, so_du_dau_ky; adds missing columns to existing tables; recreates users with 6-role CHECK |
 | `0004_fix_chuyen_xe_fk.sql` | Recreates chuyen_xe table: fixes `tai_xe_id` FK from `tai_xe(id)` → `nhan_vien(id)` |
+| `0005_user_custom_perms.sql` | `users.custom_perms` JSON — per-account permission overrides |
 
 ## Conventions
 - **Naming:** `NNNN_descriptive_name.sql` (4-digit zero-padded)

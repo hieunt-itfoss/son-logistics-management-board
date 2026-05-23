@@ -1,8 +1,39 @@
 import { Hono } from 'hono';
-import type { Env, Role } from '../types';
+import type { Env, Role, AppVariables } from '../types';
+import type { EffectivePerms } from '../utils/permissions';
 import { layout } from '../utils/layout';
+import {
+  modalShell,
+  modalFooterInner,
+  btnModalChip,
+  btnSecondary,
+  btnModalOutline,
+} from '../utils/ui';
+import {
+  parseDelimitedText,
+  buildImportPreview,
+  csvTemplate,
+  type ImportType,
+  type PhieuDraft,
+  type NewKhDraft,
+  type NewHangDraft,
+  type NewXeDraft,
+  type NewChuyenDraft,
+} from '../utils/import-data';
 
-export const loHangRoutes = new Hono<{ Bindings: Env }>();
+export const loHangRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+
+function loHangPerm(perms: EffectivePerms): (typeof ROLE_PERMS)[Role] {
+  const base = ROLE_PERMS[perms.role];
+  return {
+    loCols: base.loCols,
+    canEdit: perms.canEdit,
+    canEditTienHang: perms.canEditTienHang,
+    canDelete: perms.canDelete,
+    canSeeAllLo: perms.canSeeAllLo,
+    canCreateLo: perms.canCreateLo,
+  };
+}
 
 // ─── Constants ───────────────────────────────────────────────
 const ALL_COLS = [
@@ -152,7 +183,7 @@ const LO_HANG_SQL = `
 loHangRoutes.get('/', async (c) => {
   const user = c.get('user');
   const role = user.role as Role;
-  const perm = ROLE_PERMS[role];
+  const perm = loHangPerm(c.get('perms'));
 
   // Query params
   const filterRange = c.req.query('range') || 'thisMonth';
@@ -365,6 +396,9 @@ loHangRoutes.get('/', async (c) => {
     html += `<a href="/lo-hang/create" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
       <iconify-icon icon="solar:add-circle-linear"></iconify-icon> Phiếu mới
     </a>`;
+    html += `<button type="button" onclick="openImportModal()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+      <iconify-icon icon="solar:import-linear"></iconify-icon> Import dữ liệu
+    </button>`;
   }
   html += `<form method="GET" action="/lo-hang" class="flex flex-wrap items-center gap-2" id="filterForm">`;
   // Hidden fields to preserve state
@@ -733,16 +767,451 @@ loHangRoutes.get('/', async (c) => {
       if (res.ok) { location.reload(); } else { const err = await res.json(); alert(err.error || 'Lỗi'); }
     }
   }
+
+  window.importPreview = null;
+  function openImportModal() {
+    htqlOpenModal('importModal');
+    document.getElementById('importPreview').innerHTML = '';
+    document.getElementById('importText').value = '';
+    window.importPreview = null;
+    const input = document.getElementById('importFile');
+    if (input) input.value = '';
+    const nameEl = document.getElementById('importFileName');
+    if (nameEl) {
+      nameEl.textContent = '';
+      nameEl.classList.add('hidden');
+    }
+  }
+  function closeImportModal() {
+    htqlCloseModal('importModal');
+  }
+  function dlImportTpl(type) {
+    window.location.href = '/lo-hang/api/import/template/' + type;
+  }
+  function getImportType() {
+    const active = document.querySelector('#importTypeTabs .htql-import-tab.active');
+    return active?.dataset.value || 'phieu';
+  }
+  async function parseImport() {
+    const type = getImportType();
+    const text = document.getElementById('importText').value.trim();
+    if (!text) { alert('Dán dữ liệu hoặc chọn file CSV/TSV'); return; }
+    const res = await fetch('/lo-hang/api/import/parse', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type, text })
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Lỗi'); return; }
+    window.importPreview = data;
+    const el = document.getElementById('importPreview');
+    let h = '<div class="text-sm space-y-3">';
+    h += '<p class="text-base"><strong>' + (data.valid?.length || 0) + '</strong> dòng hợp lệ';
+    if (data.errors?.length) h += ', <span class="text-red-600">' + data.errors.length + ' lỗi</span>';
+    if (data.warns?.length) h += ', <span class="text-amber-600">' + data.warns.length + ' cảnh báo</span>';
+    h += '</p>';
+    if (data.errors?.length) {
+      h += '<ul class="text-sm text-red-600 max-h-36 overflow-y-auto">';
+      data.errors.slice(0, 20).forEach(e => { h += '<li>Dòng ' + e.row + ': ' + e.msg + '</li>'; });
+      h += '</ul>';
+    }
+    if (data.warns?.length) {
+      h += '<ul class="text-sm text-amber-700 max-h-36 overflow-y-auto">';
+      data.warns.slice(0, 15).forEach(w => { h += '<li>Dòng ' + w.row + ': ' + w.msg + '</li>'; });
+      h += '</ul>';
+    }
+    if (data.newKHs?.length) h += '<p class="text-sm">KH mới: ' + data.newKHs.length + '</p>';
+    if (data.newHangs?.length) h += '<p class="text-sm">Hãng mới: ' + data.newHangs.length + '</p>';
+    if (data.newChuyens?.length) h += '<p class="text-sm">Chuyến mới: ' + data.newChuyens.length + '</p>';
+    if (data.missingTuyens?.length) h += '<p class="text-sm text-red-600">Thiếu tuyến: ' + data.missingTuyens.join(', ') + '</p>';
+    h += '</div>';
+    el.innerHTML = h;
+    document.getElementById('importConfirmBtn').disabled = !(data.valid?.length) || (data.errors?.length > 0);
+  }
+  async function confirmImport() {
+    const preview = window.importPreview;
+    if (!preview?.valid?.length) { alert('Chưa có dữ liệu hợp lệ'); return; }
+    if (!confirm('Import ' + preview.valid.length + ' bản ghi?')) return;
+    const res = await fetch('/lo-hang/api/import/confirm', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ ...preview, type: getImportType() })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert('Đã import ' + (data.imported || 0) + ' bản ghi');
+      location.reload();
+    } else {
+      alert(data.error || 'Lỗi import');
+    }
+  }
+  function applyImportFileContent(text) {
+    const ta = document.getElementById('importText');
+    if (!ta) return;
+    ta.value = text;
+    const pasteArea = document.getElementById('importPasteArea');
+    const toggle = document.getElementById('importPasteToggle');
+    if (pasteArea) {
+      pasteArea.classList.remove('hidden');
+      if (toggle) toggle.textContent = 'Ẩn nhập thủ công';
+    }
+    document.getElementById('importPreview').innerHTML = '';
+    window.importPreview = null;
+    const btn = document.getElementById('importConfirmBtn');
+    if (btn) btn.disabled = true;
+  }
+  function readImportFile(file) {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => applyImportFileContent(String(r.result ?? ''));
+    r.onerror = () => alert('Không đọc được file');
+    r.readAsText(file);
+  }
   </script>`;
 
+  if (perm.canCreateLo) {
+    html += `
+    ${modalShell({
+      id: "importModal",
+      title: "Import dữ liệu",
+      icon: "solar:archive-up-minimlistic-bold",
+      panelClass: "htql-import-modal",
+      size: "2xl",
+      body: `
+        <div class="flex flex-col gap-4 sm:gap-5">
+          <div>
+            <span class="htql-modal-label">Loại dữ liệu</span>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2" id="importTypeTabs">
+              <button type="button" class="htql-import-tab active" data-value="phieu" onclick="setImportType(this)">
+                <iconify-icon icon="solar:document-text-linear" style="font-size:20px"></iconify-icon>
+                <span class="text-xs sm:text-sm font-medium text-center leading-tight">Phiếu</span>
+              </button>
+              <button type="button" class="htql-import-tab" data-value="kh" onclick="setImportType(this)">
+                <iconify-icon icon="solar:users-group-rounded-linear" style="font-size:20px"></iconify-icon>
+                <span class="text-xs sm:text-sm font-medium text-center leading-tight">Khách hàng</span>
+              </button>
+              <button type="button" class="htql-import-tab" data-value="hang" onclick="setImportType(this)">
+                <iconify-icon icon="solar:delivery-linear" style="font-size:20px"></iconify-icon>
+                <span class="text-xs sm:text-sm font-medium text-center leading-tight">Hãng</span>
+              </button>
+              <button type="button" class="htql-import-tab" data-value="cty" onclick="setImportType(this)">
+                <iconify-icon icon="solar:bus-linear" style="font-size:20px"></iconify-icon>
+                <span class="text-xs sm:text-sm font-medium text-center leading-tight">Công ty VT</span>
+              </button>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            ${btnModalChip("Mẫu phiếu", { onclick: "dlImportTpl('phieu')", icon: "solar:download-minimalistic-linear" })}
+            ${btnModalChip("Mẫu KH", { onclick: "dlImportTpl('kh')", icon: "solar:download-minimalistic-linear" })}
+            ${btnModalChip("Mẫu Hãng", { onclick: "dlImportTpl('hang')", icon: "solar:download-minimalistic-linear" })}
+            ${btnModalChip("Mẫu Cty VT", { onclick: "dlImportTpl('cty')", icon: "solar:download-minimalistic-linear" })}
+          </div>
+          <div>
+            <label id="importDropzone" class="htql-import-dropzone">
+              <input type="file" id="importFile" accept=".csv,.tsv,.txt,text/csv,text/plain" tabindex="-1">
+              <div class="pointer-events-none">
+                <iconify-icon icon="solar:cloud-upload-linear" class="text-bodytext dark:text-darklink" style="font-size:36px"></iconify-icon>
+                <p class="htql-import-dropzone-text">Kéo thả file CSV/TSV vào đây</p>
+                <p class="htql-import-dropzone-hint">hoặc dán từ Excel (Ctrl+V) · click để chọn file</p>
+                <p id="importFileName" class="htql-import-file-name hidden break-all"></p>
+              </div>
+            </label>
+            <div class="py-2 mt-2">
+              <button type="button" id="importPasteToggle" class="text-sm font-medium text-primary hover:underline cursor-pointer" onclick="var ta=document.getElementById('importPasteArea');var lb=document.getElementById('importPasteToggle');if(ta.classList.contains('hidden')){ta.classList.remove('hidden');lb.textContent='Ẩn nhập thủ công'}else{ta.classList.add('hidden');lb.textContent='Dán thủ công'}">Dán thủ công</button>
+            </div>
+            <div id="importPasteArea" class="hidden mt-2">
+              <textarea id="importText" rows="5" class="form-control font-mono text-sm max-h-[28vh] resize-y min-h-[100px]" placeholder="Dán header + dòng dữ liệu từ Excel..."></textarea>
+            </div>
+          </div>
+          <div id="importPreview" class="min-h-0 text-sm max-h-[30vh] overflow-y-auto"></div>
+        </div>`,
+      footer: modalFooterInner(
+        btnSecondary("Huỷ", { onclick: "closeImportModal()" }),
+        btnModalOutline("Xem trước", {
+          onclick: "parseImport()",
+          icon: "solar:eye-linear",
+        }),
+        `<button type="button" id="importConfirmBtn" onclick="confirmImport()" disabled class="btn flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+              <iconify-icon icon="solar:upload-minimalistic-linear" class="text-lg"></iconify-icon>Xác nhận
+            </button>`,
+      ),
+    })}
+    <script>
+    // Import type card-tab selector
+    function setImportType(btn) {
+      document.querySelectorAll('#importTypeTabs .htql-import-tab').forEach(function(t){ t.classList.remove('active'); });
+      btn.classList.add('active');
+    }
+    // File input + drag-drop (must run after modal markup exists)
+    (function() {
+      var input = document.getElementById('importFile');
+      var dz = document.getElementById('importDropzone');
+      if (!input || !dz) return;
+
+      function showFileName(name) {
+        var el = document.getElementById('importFileName');
+        if (!el) return;
+        if (name) {
+          el.textContent = 'Đã chọn: ' + name;
+          el.classList.remove('hidden');
+        } else {
+          el.textContent = '';
+          el.classList.add('hidden');
+        }
+      }
+
+      input.addEventListener('change', function(ev) {
+        var file = ev.target.files?.[0];
+        if (!file) return;
+        showFileName(file.name);
+        readImportFile(file);
+      });
+
+      ['dragenter', 'dragover'].forEach(function(evt) {
+        dz.addEventListener(evt, function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dz.classList.add('dz-dragover');
+        });
+      });
+      dz.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.classList.remove('dz-dragover');
+      });
+      dz.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.classList.remove('dz-dragover');
+        var file = e.dataTransfer?.files?.[0];
+        if (!file) return;
+        showFileName(file.name);
+        readImportFile(file);
+      });
+    })();
+    // Paste into importText: auto-show paste area
+    document.addEventListener('paste', function(e) {
+      var modal = document.getElementById('importModal');
+      if (modal && !modal.classList.contains('hidden')) {
+        var pasteArea = document.getElementById('importPasteArea');
+        if (pasteArea && pasteArea.classList.contains('hidden')) {
+          pasteArea.classList.remove('hidden');
+          document.getElementById('importPasteToggle').textContent = 'Ẩn nhập thủ công';
+        }
+      }
+    });
+    // Enhance parseImport preview rendering (override)
+    (function() {
+      var _origParseImport = window.parseImport;
+      window.parseImport = async function() {
+        var type = getImportType();
+        var text = document.getElementById('importText').value.trim();
+        if (!text) { alert('Dán dữ liệu hoặc chọn file CSV/TSV'); return; }
+        var res = await fetch('/lo-hang/api/import/parse', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ type: type, text: text })
+        });
+        var data = await res.json();
+        if (!res.ok) { alert(data.error || 'Lỗi'); return; }
+        window.importPreview = data;
+        var el = document.getElementById('importPreview');
+        var validCount = data.valid?.length || 0;
+        var errCount = data.errors?.length || 0;
+        var warnCount = data.warns?.length || 0;
+        var h = '<div style="animation:modalIn 0.2s ease-out" class="rounded-xl border-2 border-gray-100 overflow-hidden">';
+        // Summary row
+        h += '<div class="flex items-center flex-wrap gap-3 px-5 py-4 bg-gray-50 border-b border-gray-100">';
+        h += '<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-green-100 text-green-700"><iconify-icon icon="solar:check-circle-linear" style="font-size:18px"></iconify-icon> ' + validCount + ' hợp lệ</span>';
+        if (errCount) h += '<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-red-100 text-red-700"><iconify-icon icon="solar:close-circle-linear" style="font-size:18px"></iconify-icon> ' + errCount + ' lỗi</span>';
+        if (warnCount) h += '<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-amber-100 text-amber-700"><iconify-icon icon="solar:danger-triangle-linear" style="font-size:18px"></iconify-icon> ' + warnCount + ' cảnh báo</span>';
+        h += '</div>';
+        // Errors
+        if (data.errors?.length) {
+          h += '<details class="border-b border-gray-100"><summary class="px-5 py-3 text-base font-medium text-red-700 cursor-pointer hover:bg-red-50 transition-colors select-none flex items-center gap-2"><iconify-icon icon="solar:close-circle-linear" style="font-size:20px"></iconify-icon> Lỗi (' + errCount + ')</summary>';
+          h += '<ul class="px-5 pb-4 text-sm text-red-600 max-h-40 overflow-y-auto space-y-1 bg-red-50 mx-3 mb-3 rounded-lg">';
+          data.errors.slice(0, 20).forEach(function(e) { h += '<li class="py-0.5">Dòng ' + e.row + ': ' + e.msg + '</li>'; });
+          if (errCount > 20) h += '<li class="text-red-400 italic">...và ' + (errCount - 20) + ' lỗi khác</li>';
+          h += '</ul></details>';
+        }
+        // Warnings
+        if (data.warns?.length) {
+          h += '<details class="border-b border-gray-100"><summary class="px-5 py-3 text-base font-medium text-amber-700 cursor-pointer hover:bg-amber-50 transition-colors select-none flex items-center gap-2"><iconify-icon icon="solar:danger-triangle-linear" style="font-size:20px"></iconify-icon> Cảnh báo (' + warnCount + ')</summary>';
+          h += '<ul class="px-5 pb-4 text-sm text-amber-700 max-h-40 overflow-y-auto space-y-1 bg-amber-50 mx-3 mb-3 rounded-lg">';
+          data.warns.slice(0, 15).forEach(function(w) { h += '<li class="py-0.5">Dòng ' + w.row + ': ' + w.msg + '</li>'; });
+          if (warnCount > 15) h += '<li class="text-amber-400 italic">...và ' + (warnCount - 15) + ' cảnh báo khác</li>';
+          h += '</ul></details>';
+        }
+        // New items badges
+        var newItems = [];
+        if (data.newKHs?.length) newItems.push('<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-700">' + data.newKHs.length + ' KH mới</span>');
+        if (data.newHangs?.length) newItems.push('<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-violet-100 text-violet-700">' + data.newHangs.length + ' Hãng mới</span>');
+        if (data.newChuyens?.length) newItems.push('<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-teal-100 text-teal-700">' + data.newChuyens.length + ' Chuyến mới</span>');
+        if (newItems.length) {
+          h += '<div class="px-5 py-4 flex flex-wrap gap-2">';
+          newItems.forEach(function(b) { h += b; });
+          h += '</div>';
+        }
+        // Missing routes
+        if (data.missingTuyens?.length) {
+          h += '<div class="mx-3 mb-3 px-5 py-4 rounded-xl bg-red-50 border-2 border-red-200 flex items-start gap-3"><iconify-icon icon="solar:danger-triangle-linear" style="font-size:22px;color:#dc2626;margin-top:1px"></iconify-icon><div><p class="text-base font-semibold text-red-700">Thiếu tuyến</p><p class="text-sm text-red-600 mt-1">' + data.missingTuyens.join(', ') + '</p></div></div>';
+        }
+        h += '</div>';
+        el.innerHTML = h;
+        document.getElementById('importConfirmBtn').disabled = !(data.valid?.length) || (data.errors?.length > 0);
+      };
+    })();
+    </script>`;
+  }
+
   return c.html(layout('Phiếu', html, user, 'lo-hang'));
+});
+
+// ─── GET /create — Create Form ────────────────────────────────
+loHangRoutes.get('/create', async (c) => {
+  const user = c.get('user');
+  const perm = loHangPerm(c.get('perms'));
+
+  if (!perm.canCreateLo) {
+    return c.html(layout('Không có quyền', '<div class="text-center py-12 text-red-500">Bạn không có quyền tạo phiếu</div>', user, 'lo-hang'));
+  }
+
+  const khRes = await c.env.DB.prepare('SELECT id, ten, ma_kh FROM khach_hang ORDER BY ten').all();
+  const hangRes = await c.env.DB.prepare('SELECT id, ten FROM hang ORDER BY ten').all();
+  const cxRes = await c.env.DB.prepare(
+    `SELECT cx.id, t.ten as tuyen_ten, x.bien_so, cx.ngay_di
+     FROM chuyen_xe cx LEFT JOIN tuyen t ON cx.tuyen_id = t.id LEFT JOIN xe x ON cx.xe_id = x.id
+     ORDER BY cx.ngay_di DESC LIMIT 200`
+  ).all();
+  const nvRes = await c.env.DB.prepare(`SELECT id, ten FROM nhan_vien WHERE active = 1 ORDER BY ten`).all();
+
+  const khOptions = (khRes.results as {id:string;ten:string;ma_kh:string}[]).map(k =>
+    `<option value="${esc(k.id)}">${esc(k.ma_kh)} - ${esc(k.ten)}</option>`
+  ).join('');
+  const hangOptions = (hangRes.results as {id:string;ten:string}[]).map(h =>
+    `<option value="${esc(h.id)}">${esc(h.ten)}</option>`
+  ).join('');
+  const cxOptions = (cxRes.results as {id:string;tuyen_ten:string;bien_so:string;ngay_di:string}[]).map(cx =>
+    `<option value="${esc(cx.id)}">${esc(cx.id)} | ${esc(cx.tuyen_ten||'-')} | ${esc(cx.bien_so||'-')} | ${cx.ngay_di||'-'}</option>`
+  ).join('');
+  const nvOptions = (nvRes.results as {id:string;ten:string}[]).map(nv =>
+    `<option value="${esc(nv.id)}">${esc(nv.ten)}</option>`
+  ).join('');
+
+  let html = `<a href="/lo-hang" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm mb-4">
+    <iconify-icon icon="solar:arrow-left-linear"></iconify-icon> Quay lại danh sách
+  </a>`;
+
+  html += `<div class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-lg font-bold text-gray-900 mb-4">Tạo phiếu mới</h2>
+    <form id="createForm" class="grid grid-cols-2 sm:grid-cols-3 gap-4" onsubmit="return createLo(event)">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Chuyến xe</label>
+        <select name="chuyen_xe_id" id="chuyenSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="">-- Chưa có chuyến (DK) --</option>${cxOptions}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Khách hàng <span class="text-red-500">*</span></label>
+        <select name="khach_hang_id" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="">-- Chọn KH --</option>${khOptions}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Hãng <span class="text-red-500">*</span></label>
+        <select name="hang_id" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="">-- Chọn hãng --</option>${hangOptions}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Số kiện</label>
+        <input type="number" name="so_kien" value="1" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" oninput="calcThanhTien()">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Đơn giá</label>
+        <input type="number" name="don_gia" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" oninput="calcThanhTien()">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Tiền tệ</label>
+        <select name="tien_te" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="PLN">PLN</option>
+          <option value="EUR">EUR</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Thành tiền (tự tính)</label>
+        <input type="number" name="thanh_tien" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50" readonly>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Số tiền hàng</label>
+        <input type="number" name="so_tien_hang" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Giảm giá</label>
+        <input type="number" name="giam_gia" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" oninput="calcThanhTien()">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Người tạo</label>
+        <select name="nguoi_tao" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="">-- Chọn --</option>${nvOptions}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Người thu</label>
+        <select name="nguoi_thu" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="">-- Chọn --</option>${nvOptions}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+        <input type="text" name="ly_do_thieu" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+      </div>
+      <div class="col-span-2 sm:col-span-3 flex gap-2 pt-2">
+        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium cursor-pointer">Tạo phiếu</button>
+        <a href="/lo-hang" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm">Hủy</a>
+      </div>
+    </form>
+  </div>`;
+
+  html += `<script>
+  function calcThanhTien() {
+    const form = document.getElementById('createForm');
+    const soKien = Number(form.so_kien.value) || 0;
+    const donGia = Number(form.don_gia.value) || 0;
+    const giamGia = Number(form.giam_gia.value) || 0;
+    form.thanh_tien.value = Math.max(0, soKien * donGia - giamGia);
+  }
+  async function createLo(e) {
+    e.preventDefault();
+    const form = e.target;
+    const fd = new FormData(form);
+    const body = Object.fromEntries(fd.entries());
+    body.so_kien = Number(body.so_kien) || 0;
+    body.don_gia = Number(body.don_gia) || 0;
+    body.thanh_tien = Number(body.thanh_tien) || 0;
+    body.so_tien_hang = Number(body.so_tien_hang) || 0;
+    body.giam_gia = Number(body.giam_gia) || 0;
+    body.da_tra_hang = 0;
+    const res = await fetch('/lo-hang/api/lo-hang', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (res.ok) { window.location.href = '/lo-hang'; }
+    else { const err = await res.json(); alert(err.error || 'Lỗi'); }
+    return false;
+  }
+  </script>`;
+
+  return c.html(layout('Tạo phiếu', html, user, 'lo-hang'));
 });
 
 // ─── GET /:id — Detail View ──────────────────────────────────
 loHangRoutes.get('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
-  const perm = ROLE_PERMS[user.role as Role];
+  const perm = loHangPerm(c.get('perms'));
 
   const lo = await c.env.DB.prepare(
     `${LO_HANG_SQL} WHERE lh.id = ?`
@@ -990,146 +1459,6 @@ loHangRoutes.get('/:id', async (c) => {
   return c.html(layout('Phiếu: ' + id, html, user, 'lo-hang'));
 });
 
-// ─── GET /create — Create Form ────────────────────────────────
-loHangRoutes.get('/create', async (c) => {
-  const user = c.get('user');
-  const perm = ROLE_PERMS[user.role as Role];
-
-  if (!perm.canCreateLo) {
-    return c.html(layout('Không có quyền', '<div class="text-center py-12 text-red-500">Bạn không có quyền tạo phiếu</div>', user, 'lo-hang'));
-  }
-
-  const khRes = await c.env.DB.prepare('SELECT id, ten, ma_kh FROM khach_hang ORDER BY ten').all();
-  const hangRes = await c.env.DB.prepare('SELECT id, ten FROM hang ORDER BY ten').all();
-  const cxRes = await c.env.DB.prepare(
-    `SELECT cx.id, t.ten as tuyen_ten, x.bien_so, cx.ngay_di
-     FROM chuyen_xe cx LEFT JOIN tuyen t ON cx.tuyen_id = t.id LEFT JOIN xe x ON cx.xe_id = x.id
-     ORDER BY cx.ngay_di DESC LIMIT 200`
-  ).all();
-  const nvRes = await c.env.DB.prepare(`SELECT id, ten FROM nhan_vien WHERE active = 1 ORDER BY ten`).all();
-
-  const khOptions = (khRes.results as {id:string;ten:string;ma_kh:string}[]).map(k =>
-    `<option value="${esc(k.id)}">${esc(k.ma_kh)} - ${esc(k.ten)}</option>`
-  ).join('');
-  const hangOptions = (hangRes.results as {id:string;ten:string}[]).map(h =>
-    `<option value="${esc(h.id)}">${esc(h.ten)}</option>`
-  ).join('');
-  const cxOptions = (cxRes.results as {id:string;tuyen_ten:string;bien_so:string;ngay_di:string}[]).map(cx =>
-    `<option value="${esc(cx.id)}">${esc(cx.id)} | ${esc(cx.tuyen_ten||'-')} | ${esc(cx.bien_so||'-')} | ${cx.ngay_di||'-'}</option>`
-  ).join('');
-  const nvOptions = (nvRes.results as {id:string;ten:string}[]).map(nv =>
-    `<option value="${esc(nv.id)}">${esc(nv.ten)}</option>`
-  ).join('');
-
-  let html = `<a href="/lo-hang" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm mb-4">
-    <iconify-icon icon="solar:arrow-left-linear"></iconify-icon> Quay lại danh sách
-  </a>`;
-
-  html += `<div class="bg-white rounded-lg shadow p-6">
-    <h2 class="text-lg font-bold text-gray-900 mb-4">Tạo phiếu mới</h2>
-    <form id="createForm" class="grid grid-cols-2 sm:grid-cols-3 gap-4" onsubmit="return createLo(event)">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Chuyến xe</label>
-        <select name="chuyen_xe_id" id="chuyenSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chưa có chuyến (DK) --</option>${cxOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Khách hàng <span class="text-red-500">*</span></label>
-        <select name="khach_hang_id" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chọn KH --</option>${khOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Hãng <span class="text-red-500">*</span></label>
-        <select name="hang_id" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chọn hãng --</option>${hangOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Số kiện</label>
-        <input type="number" name="so_kien" value="1" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" oninput="calcThanhTien()">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Đơn giá</label>
-        <input type="number" name="don_gia" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" oninput="calcThanhTien()">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Tiền tệ</label>
-        <select name="tien_te" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="PLN">PLN</option>
-          <option value="EUR">EUR</option>
-          <option value="USD">USD</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Thành tiền (tự tính)</label>
-        <input type="number" name="thanh_tien" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50" readonly>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Số tiền hàng</label>
-        <input type="number" name="so_tien_hang" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Giảm giá</label>
-        <input type="number" name="giam_gia" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" oninput="calcThanhTien()">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Người tạo</label>
-        <select name="nguoi_tao" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chọn --</option>${nvOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Người thu</label>
-        <select name="nguoi_thu" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chọn --</option>${nvOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
-        <input type="text" name="ly_do_thieu" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-      </div>
-      <div class="col-span-2 sm:col-span-3 flex gap-2 pt-2">
-        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium cursor-pointer">Tạo phiếu</button>
-        <a href="/lo-hang" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm">Hủy</a>
-      </div>
-    </form>
-  </div>`;
-
-  html += `<script>
-  function calcThanhTien() {
-    const form = document.getElementById('createForm');
-    const soKien = Number(form.so_kien.value) || 0;
-    const donGia = Number(form.don_gia.value) || 0;
-    const giamGia = Number(form.giam_gia.value) || 0;
-    form.thanh_tien.value = Math.max(0, soKien * donGia - giamGia);
-  }
-  async function createLo(e) {
-    e.preventDefault();
-    const form = e.target;
-    const fd = new FormData(form);
-    const body = Object.fromEntries(fd.entries());
-    body.so_kien = Number(body.so_kien) || 0;
-    body.don_gia = Number(body.don_gia) || 0;
-    body.thanh_tien = Number(body.thanh_tien) || 0;
-    body.so_tien_hang = Number(body.so_tien_hang) || 0;
-    body.giam_gia = Number(body.giam_gia) || 0;
-    body.da_tra_hang = 0;
-    const res = await fetch('/lo-hang/api/lo-hang', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
-    if (res.ok) { window.location.href = '/lo-hang'; }
-    else { const err = await res.json(); alert(err.error || 'Lỗi'); }
-    return false;
-  }
-  </script>`;
-
-  return c.html(layout('Tạo phiếu', html, user, 'lo-hang'));
-});
-
 // ─── POST /api/lo-hang — Create ──────────────────────────────
 loHangRoutes.post('/api/lo-hang', async (c) => {
   const user = c.get('user');
@@ -1328,6 +1657,232 @@ loHangRoutes.post('/api/lo-hang/bulk', async (c) => {
   }
 
   return c.json({ error: 'Unknown action' }, 400);
+});
+
+// ─── Import APIs ───────────────────────────────────────────────
+async function loadImportContext(db: D1Database) {
+  const [kh, hang, cty, tuyen, xe, chuyen] = await Promise.all([
+    db.prepare('SELECT id, ma_kh, ten FROM khach_hang').all<KhRow>(),
+    db.prepare('SELECT id, ten FROM hang').all<{ id: string; ten: string }>(),
+    db.prepare('SELECT id, ten FROM cty_van_tai').all<{ id: string; ten: string }>(),
+    db.prepare('SELECT id, ten, tien_to FROM tuyen').all<{ id: string; ten: string; tien_to: string }>(),
+    db.prepare('SELECT id, so_xe, bien_so, tai_xe_id FROM xe').all<XeRow>(),
+    db.prepare('SELECT id, xe_id, tuyen_id, ngay_di FROM chuyen_xe').all<ChuyenRow>(),
+  ]);
+  return {
+    khachHang: kh.results || [],
+    hang: hang.results || [],
+    ctyVT: cty.results || [],
+    tuyen: tuyen.results || [],
+    xe: xe.results || [],
+    chuyenXe: chuyen.results || [],
+    loHangCountByKh: new Map<string, number>(),
+  };
+}
+
+interface KhRow { id: string; ma_kh: string; ten: string }
+interface XeRow { id: string; so_xe: string; bien_so: string; tai_xe_id: string }
+interface ChuyenRow { id: string; xe_id: string; tuyen_id: string; ngay_di: string }
+
+loHangRoutes.get('/api/import/template/:type', async (c) => {
+  const user = c.get('user');
+  const perm = loHangPerm(c.get('perms'));
+  if (!perm.canCreateLo) return c.json({ error: 'Forbidden' }, 403);
+  const type = c.req.param('type') as ImportType;
+  if (!['kh', 'hang', 'cty', 'phieu'].includes(type)) return c.json({ error: 'Invalid type' }, 400);
+  const tpl = csvTemplate(type);
+  return new Response(tpl.content, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${tpl.filename}"`,
+    },
+  });
+});
+
+loHangRoutes.post('/api/import/parse', async (c) => {
+  const user = c.get('user');
+  const perm = loHangPerm(c.get('perms'));
+  if (!perm.canCreateLo) return c.json({ error: 'Forbidden' }, 403);
+
+  const body = await c.req.json<{ type: ImportType; text: string }>();
+  const type = body.type;
+  if (!type || !body.text) return c.json({ error: 'Thiếu type hoặc text' }, 400);
+
+  const parsed = parseDelimitedText(body.text);
+  if (parsed.rows.length === 0) return c.json({ error: 'Không có dòng dữ liệu' }, 400);
+
+  const ctx = await loadImportContext(c.env.DB);
+  const preview = buildImportPreview(type, parsed.rows, ctx);
+  return c.json({ type, ...preview });
+});
+
+loHangRoutes.post('/api/import/confirm', async (c) => {
+  const user = c.get('user');
+  const perm = loHangPerm(c.get('perms'));
+  if (!perm.canCreateLo) return c.json({ error: 'Forbidden' }, 403);
+
+  const body = await c.req.json<{
+    type: ImportType;
+    valid: unknown[];
+    newKHs?: NewKhDraft[];
+    newHangs?: NewHangDraft[];
+    newXes?: NewXeDraft[];
+    newChuyens?: NewChuyenDraft[];
+  }>();
+
+  const db = c.env.DB;
+  const now = new Date().toISOString();
+  let imported = 0;
+
+  if (body.type === 'kh') {
+    for (const row of body.valid as { ten: string; nip?: string; dia_chi?: string; sdt?: string; han_tt?: number; ghi_chu?: string }[]) {
+      const id = `KH-${Date.now()}-${imported}`;
+      const maKh = `KH${String(imported + 1).padStart(4, '0')}`;
+      await db.prepare(
+        `INSERT OR IGNORE INTO khach_hang (id, ma_kh, ten, nip, dia_chi, sdt, han_tt, ghi_chu, danh_gia, danh_gia_manual, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?)`
+      ).bind(id, maKh, row.ten, row.nip || '', row.dia_chi || '', row.sdt || '', row.han_tt || 30, row.ghi_chu || '', now, now).run();
+      imported++;
+    }
+  } else if (body.type === 'hang') {
+    for (const row of body.valid as { ten: string; nuoc?: string; dia_chi?: string }[]) {
+      const id = `H-${Date.now()}-${imported}`;
+      await db.prepare(
+        `INSERT OR IGNORE INTO hang (id, ten, nuoc, dia_chi, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(id, row.ten, row.nuoc || '', row.dia_chi || '', now, now).run();
+      imported++;
+    }
+  } else if (body.type === 'cty') {
+    for (const row of body.valid as { ten: string; dia_chi?: string; sdt?: string }[]) {
+      const id = `CTY-${Date.now()}-${imported}`;
+      await db.prepare(
+        `INSERT OR IGNORE INTO cty_van_tai (id, ten, dia_chi, sdt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(id, row.ten, row.dia_chi || '', row.sdt || '', now, now).run();
+      imported++;
+    }
+  } else if (body.type === 'phieu') {
+    const khNameToId = new Map<string, string>();
+    const hangNameToId = new Map<string, string>();
+    const xeKeyToId = new Map<string, string>();
+
+    const allKh = await db.prepare('SELECT id, ten FROM khach_hang').all<{ id: string; ten: string }>();
+    for (const k of allKh.results || []) {
+      khNameToId.set(k.ten.trim().toLowerCase().replace(/\s+/g, ' '), k.id);
+    }
+
+    for (const kh of body.newKHs || []) {
+      if (kh.checked === false) continue;
+      const id = `KH-${Date.now()}-${imported}`;
+      const maKh = `IMP${String(imported + 1).padStart(4, '0')}`;
+      await db.prepare(
+        `INSERT OR IGNORE INTO khach_hang (id, ma_kh, ten, nip, dia_chi, sdt, han_tt, ghi_chu, danh_gia, danh_gia_manual, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, '', '', '', ?, ?)`
+      ).bind(id, maKh, kh.ten, kh.nip || '', kh.dia_chi || '', kh.sdt || '', kh.han_tt || 30, now, now).run();
+      khNameToId.set(kh.ten.trim().toLowerCase().replace(/\s+/g, ' '), id);
+      imported++;
+    }
+
+    const allHang = await db.prepare('SELECT id, ten FROM hang').all<{ id: string; ten: string }>();
+    for (const h of allHang.results || []) {
+      hangNameToId.set(h.ten.trim().toLowerCase().replace(/\s+/g, ' '), h.id);
+    }
+    for (const h of body.newHangs || []) {
+      if (h.checked === false) continue;
+      const id = `H-${Date.now()}-${imported}`;
+      await db.prepare(
+        `INSERT OR IGNORE INTO hang (id, ten, nuoc, dia_chi, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(id, h.ten, h.nuoc || '', h.dia_chi || '', now, now).run();
+      hangNameToId.set(h.ten.trim().toLowerCase().replace(/\s+/g, ' '), id);
+      imported++;
+    }
+
+    for (const x of body.newXes || []) {
+      if (x.checked === false) continue;
+      const id = x.so_xe.replace(/\s+/g, '-').slice(0, 20) || `XE-${imported}`;
+      await db.prepare(
+        `INSERT OR IGNORE INTO xe (id, bien_so, so_xe, loai_xe, trong_tai, tai_xe_id, created_at, updated_at)
+         VALUES (?, ?, ?, '', 0, '', ?, ?)`
+      ).bind(id, x.bien_so || x.so_xe, x.so_xe, now, now).run();
+      xeKeyToId.set(x.so_xe.trim().toLowerCase().replace(/\s+/g, ' '), id);
+    }
+
+    for (const ch of body.newChuyens || []) {
+      const xeKey = (ch.so_xe || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const xeId = ch.xe_id || (xeKey ? xeKeyToId.get(xeKey) : '') || '';
+      if (!xeId || !ch.tuyen_id) continue;
+      await db.prepare(
+        `INSERT OR IGNORE INTO chuyen_xe (id, tuyen_id, xe_id, tai_xe_id, ngay_di, ngay_den, trang_thai, ghi_chu, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'planned', '', ?, ?)`
+      ).bind(ch.id, ch.tuyen_id, xeId, ch.tai_xe_id || '', ch.ngay_di, ch.ngay_den || ch.ngay_di, now, now).run();
+    }
+
+    for (const p of body.valid as PhieuDraft[]) {
+      let khId = p.khach_hang_id;
+      let hangId = p.hang_id;
+      if (p._khTen) khId = khNameToId.get(p._khTen.trim().toLowerCase().replace(/\s+/g, ' ')) || khId;
+      if (p._hangTen) hangId = hangNameToId.get(p._hangTen.trim().toLowerCase().replace(/\s+/g, ' ')) || hangId;
+      if (!khId || !hangId) continue;
+
+      let loId: string;
+      if (p.chuyen_xe_id) {
+        const last = await db.prepare(
+          'SELECT id FROM lo_hang WHERE chuyen_xe_id = ? ORDER BY id DESC LIMIT 1'
+        ).bind(p.chuyen_xe_id).first<{ id: string }>();
+        let seq = 1;
+        if (last?.id) {
+          const parts = last.id.split('-');
+          seq = (parseInt(parts[parts.length - 1], 10) || 0) + 1;
+        }
+        loId = `${p.chuyen_xe_id}-${String(seq).padStart(3, '0')}`;
+      } else {
+        const today = new Date();
+        const ds = String(today.getFullYear()).slice(-2) +
+          String(today.getMonth() + 1).padStart(2, '0') +
+          String(today.getDate()).padStart(2, '0');
+        loId = `DK${ds}-${String(imported + 1).padStart(3, '0')}`;
+      }
+
+      await db.prepare(
+        `INSERT OR IGNORE INTO lo_hang (id, chuyen_xe_id, khach_hang_id, hang_id, so_kien, da_tra_hang,
+         ly_do_thieu, don_gia, tien_te, thanh_tien, so_tien_hang, giam_gia, nguoi_tao, nguoi_thu, tien_te_th, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        loId,
+        p.chuyen_xe_id || '',
+        khId,
+        hangId,
+        p.so_kien,
+        p.da_tra_hang,
+        p.ly_do_thieu || '',
+        p.don_gia,
+        p.tien_te || 'PLN',
+        p.thanh_tien,
+        p.so_tien_hang,
+        p.giam_gia || 0,
+        p.nguoi_tao || '',
+        p.nguoi_thu || '',
+        p.tien_te_th || p.tien_te || 'PLN',
+        now,
+        now,
+      ).run();
+      imported++;
+    }
+  } else {
+    return c.json({ error: 'Invalid type' }, 400);
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO audit_log (id, ngay, gio, nguoi, nguoi_label, hanh_dong, target, chi_tiet)
+     VALUES (?, date('now'), strftime('%H:%M','now'), ?, ?, 'Import', ?, ?)`
+  ).bind(
+    `AL-${Date.now()}`,
+    user.role,
+    user.display_name,
+    body.type,
+    `${imported} bản ghi`,
+  ).run();
+
+  return c.json({ success: true, imported });
 });
 
 // ─── Helper: build grid URL preserving params ─────────────────

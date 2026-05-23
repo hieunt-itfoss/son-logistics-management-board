@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
-import type { Env } from './types';
+import type { Env, AppVariables } from './types';
 import { authMiddleware } from './middleware/auth';
-import { authRoutes } from './routes/auth';
+import { rbacMiddleware } from './middleware/rbac';
+import { authRoutes, changePasswordRoutes } from './routes/auth';
 import { dashboardRoutes } from './routes/dashboard';
 import { doiTacRoutes } from './routes/doi-tac';
 import { tuyenRoutes } from './routes/tuyen';
@@ -20,9 +21,11 @@ app.get('/health', (c) => c.json({ status: 'ok' }));
 
 app.route('/', authRoutes);
 
-const protectedApp = new Hono<{ Bindings: Env }>();
+const protectedApp = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 protectedApp.use('*', authMiddleware);
+protectedApp.use('*', rbacMiddleware);
 
+protectedApp.route('/', changePasswordRoutes);
 protectedApp.route('/', dashboardRoutes);
 protectedApp.route('/doi-tac', doiTacRoutes);
 protectedApp.route('/tuyen', tuyenRoutes);

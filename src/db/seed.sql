@@ -3,12 +3,16 @@
 
 -- Users (login accounts for 6 roles)
 INSERT OR IGNORE INTO users (id, username, password_hash, display_name, role, active) VALUES
-  ('USR-001', 'admin', 'admin123', 'Admin', 'admin', 1),
-  ('USR-002', 'ketoan', 'admin123', 'Kế toán trưởng', 'ketoanTruong', 1),
-  ('USR-003', 'nhanvien', 'admin123', 'Nhân viên', 'nhanvien', 1),
-  ('USR-004', 'kho', 'admin123', 'Thủ kho', 'kho', 1),
-  ('USR-005', 'laixe', 'admin123', 'Lái xe', 'laixe', 1),
-  ('USR-006', 'ketoanvien', 'admin123', 'Kế toán viên', 'ketoanVien', 1);
+  ('USR-001', 'admin',      'admin123', 'Admin',           'admin',        1),
+  ('USR-002', 'ketoan',     'admin123', 'Kế toán trưởng',  'ketoanTruong', 1),
+  ('USR-003', 'nhanvien',   'admin123', 'Nhân viên',       'nhanvien',     1),
+  ('USR-004', 'kho',        'admin123', 'Thủ kho',         'kho',          1),
+  ('USR-005', 'laixe',      'admin123', 'Lái xe',          'laixe',        1),
+  ('USR-006', 'ketoanvien', 'admin123', 'Kế toán viên',    'ketoanVien',   1);
+
+-- Reset passwords to plaintext so first login re-hashes with current SESSION_SECRET.
+-- Safe to run repeatedly: only affects these seed accounts.
+UPDATE users SET password_hash = 'admin123' WHERE id IN ('USR-001','USR-002','USR-003','USR-004','USR-005','USR-006');
 
 -- Nhan vien (unified staff, replaces tai_xe)
 INSERT OR IGNORE INTO nhan_vien (id, ten, vai_tro, sdt, so_giay_to, dia_chi) VALUES

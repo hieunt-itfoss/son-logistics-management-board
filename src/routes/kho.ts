@@ -29,8 +29,8 @@ khoRoutes.get('/', async (c) => {
       `<span class="font-medium">${lh.so_kien}</span>`,
       `<span class="text-success font-medium">${lh.da_tra_hang}</span>`,
       `<span class="text-error font-medium">${lh.chua_tra}</span>`,
-      tableActions(`showUpdateForm('${lh.id}', ${lh.so_kien}, ${lh.da_tra_hang})`),
-    ]),
+      tableActions(`showUpdateForm('${lh.id}', ${lh.so_kien}, ${lh.da_tra_hang})`, undefined, undefined, { center: true }),
+    ], { align: 'center' }),
   ).join('');
 
   const content = `
@@ -56,6 +56,7 @@ khoRoutes.get('/', async (c) => {
     ${dataTable(
       ['Mã lô', 'Khách hàng', 'Hãng', 'Chuyến', 'Tổng kiện', 'Đã trả', 'Còn lại', 'Thao tác'],
       rows || tableEmpty(8, 'Không có hàng trong kho'),
+      { align: 'center' },
     )}
 
     <script>

@@ -154,10 +154,10 @@ tuyenRoutes.get('/', async (c) => {
             <strong>${DM_GROUP_LABEL[t.dau_muc_group] || t.dau_muc_group}</strong>
           </span>`,
       `<span class="inline-block px-2 py-0.5 rounded-md bg-lightgray dark:bg-darkgray text-xs font-mono">${esc(t.tien_to)}</span>`,
-      `<span class="text-right tabular-nums block">${chCount}</span>`,
-      `<span class="text-right tabular-nums block">${loCount}</span>`,
-      tableActions(`editTuyen('${t.id}')`, `deleteTuyen('${t.id}')`),
-    ]);
+      `<span class="tabular-nums">${chCount}</span>`,
+      `<span class="tabular-nums">${loCount}</span>`,
+      tableActions(`editTuyen('${t.id}')`, `deleteTuyen('${t.id}')`, undefined, { center: true }),
+    ], { align: 'center' });
   }).join('');
 
   const content = `
@@ -187,6 +187,7 @@ tuyenRoutes.get('/', async (c) => {
     ${dataTable(
       ['Mã', 'Tên tuyến', 'Đầu mục VT', 'Tiền tố', 'Số chuyến', 'Số phiếu', 'Thao tác'],
       rows || tableEmpty(7, 'Chưa có tuyến nào'),
+      { align: 'center' },
     )}
 
     <script>

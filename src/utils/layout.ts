@@ -1,4 +1,5 @@
 import type { Role } from '../types';
+import { hasPermission } from '../middleware/auth';
 
 const ALL_NAV_ITEMS = [
   { label: 'Dashboard', href: '/', icon: 'solar:widget-linear', id: 'dashboard', roles: ['admin','ketoanTruong','ketoanVien','nhanvien'] },
@@ -29,7 +30,7 @@ function sidebarLink(item: typeof ALL_NAV_ITEMS[0], activePage: string): string 
 
 export function layout(title: string, content: string, user: { display_name: string; role: string }, activePage: string): string {
   const userRole = user.role as Role;
-  const visibleItems = ALL_NAV_ITEMS.filter(item => item.roles.includes(userRole));
+  const visibleItems = ALL_NAV_ITEMS.filter((item) => hasPermission(userRole, item.id));
   const sidebarLinks = visibleItems.map(item => sidebarLink(item, activePage)).join('\n          ');
 
   return `<!DOCTYPE html>
@@ -78,7 +79,6 @@ export function layout(title: string, content: string, user: { display_name: str
           <button type="button" class="xl:hidden header-link-btn" data-hs-overlay="#application-sidebar-brand" aria-label="Mở menu">
             <iconify-icon icon="solar:hamburger-menu-linear" class="text-xl"></iconify-icon>
           </button>
-          <h2 class="text-lg font-semibold text-dark dark:text-white hidden sm:block">${title}</h2>
         </div>
         <div class="flex items-center gap-2 sm:gap-3">
           <button type="button" id="theme-toggle" class="header-link-btn" aria-label="Đổi giao diện">
@@ -110,6 +110,7 @@ export function layout(title: string, content: string, user: { display_name: str
   <script src="https://cdn.jsdelivr.net/npm/preline@2.7.0/dist/preline.min.js"></script>
   <script src="/assets/js/app.init.js"></script>
   <script src="/assets/js/app.min.js"></script>
+  <script src="/assets/js/htql-modal.js"></script>
   <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
   <script>
     (function () {
