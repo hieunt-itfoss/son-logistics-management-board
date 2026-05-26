@@ -1,25 +1,94 @@
-import type { Role } from '../types';
-import { hasPermission } from '../middleware/auth';
+import type { Role } from "../types";
+import { hasPermission } from "../middleware/auth";
 
 const ALL_NAV_ITEMS = [
-  { label: 'Dashboard', href: '/', icon: 'solar:widget-linear', id: 'dashboard', roles: ['admin','ketoanTruong','ketoanVien','nhanvien'] },
-  { label: 'Phiếu', href: '/lo-hang', icon: 'solar:box-linear', id: 'lo-hang', roles: ['admin','ketoanTruong','ketoanVien','nhanvien','kho','laixe'] },
-  { label: 'Đối tác', href: '/doi-tac', icon: 'solar:users-group-rounded-linear', id: 'doi-tac', roles: ['admin','ketoanTruong','ketoanVien','nhanvien'] },
-  { label: 'Tuyến vận tải', href: '/tuyen', icon: 'solar:route-linear', id: 'tuyen', roles: ['admin','ketoanTruong','ketoanVien','nhanvien'] },
-  { label: 'Chuyến xe', href: '/chuyen-xe', icon: 'solar:bus-linear', id: 'chuyen-xe', roles: ['admin','ketoanTruong','ketoanVien','nhanvien'] },
-  { label: 'Kho', href: '/kho', icon: 'solar:box-linear', id: 'kho', roles: ['admin','ketoanTruong','ketoanVien','nhanvien','kho'] },
-  { label: 'Nhân viên', href: '/nhan-vien', icon: 'solar:user-id-linear', id: 'nhan-vien', roles: ['admin','ketoanTruong','ketoanVien','nhanvien'] },
-  { label: 'Chấm công', href: '/cham-cong', icon: 'solar:clock-circle-linear', id: 'cham-cong', roles: ['admin','ketoanTruong','ketoanVien','nhanvien'] },
-  { label: 'Thu / Chi', href: '/thu-chi', icon: 'solar:wallet-money-linear', id: 'thu-chi', roles: ['admin','ketoanTruong','ketoanVien','nhanvien'] },
-  { label: 'Công cụ', href: '/cong-cu', icon: 'solar:settings-linear', id: 'cong-cu', roles: ['admin','ketoanTruong','ketoanVien','nhanvien'] },
-  { label: 'Manager', href: '/manager', icon: 'solar:shield-check-linear', id: 'manager', roles: ['admin','ketoanTruong'] },
+  {
+    label: "Dashboard",
+    href: "/",
+    icon: "solar:widget-linear",
+    id: "dashboard",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien"],
+  },
+  {
+    label: "Phiếu",
+    href: "/lo-hang",
+    icon: "solar:box-linear",
+    id: "lo-hang",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien", "kho", "laixe"],
+  },
+  {
+    label: "Đối tác",
+    href: "/doi-tac",
+    icon: "solar:users-group-rounded-linear",
+    id: "doi-tac",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien"],
+  },
+  {
+    label: "Tuyến vận tải",
+    href: "/tuyen",
+    icon: "solar:route-linear",
+    id: "tuyen",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien"],
+  },
+  {
+    label: "Chuyến xe",
+    href: "/chuyen-xe",
+    icon: "solar:bus-linear",
+    id: "chuyen-xe",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien"],
+  },
+  {
+    label: "Kho",
+    href: "/kho",
+    icon: "solar:box-linear",
+    id: "kho",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien", "kho"],
+  },
+  {
+    label: "Nhân viên",
+    href: "/nhan-vien",
+    icon: "solar:user-id-linear",
+    id: "nhan-vien",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien"],
+  },
+  {
+    label: "Chấm công",
+    href: "/cham-cong",
+    icon: "solar:clock-circle-linear",
+    id: "cham-cong",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien"],
+  },
+  {
+    label: "Thu / Chi",
+    href: "/thu-chi",
+    icon: "solar:wallet-money-linear",
+    id: "thu-chi",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien"],
+  },
+  {
+    label: "Công cụ",
+    href: "/cong-cu",
+    icon: "solar:settings-linear",
+    id: "cong-cu",
+    roles: ["admin", "ketoanTruong", "ketoanVien", "nhanvien"],
+  },
+  {
+    label: "Manager",
+    href: "/manager",
+    icon: "solar:shield-check-linear",
+    id: "manager",
+    roles: ["admin", "ketoanTruong"],
+  },
 ];
 
-function sidebarLink(item: typeof ALL_NAV_ITEMS[0], activePage: string): string {
+function sidebarLink(
+  item: (typeof ALL_NAV_ITEMS)[0],
+  activePage: string,
+): string {
   const isActive = item.id === activePage;
   const linkClass = isActive
-    ? 'sidebar-link gap-3 activemenu'
-    : 'sidebar-link gap-3 dark-sidebar-link';
+    ? "sidebar-link gap-3 activemenu"
+    : "sidebar-link gap-3 dark-sidebar-link";
   return `<li class="sidebar-item">
           <a class="${linkClass}" href="${item.href}">
             <iconify-icon icon="${item.icon}" class="text-xl shrink-0" width="22" height="22"></iconify-icon>
@@ -28,10 +97,19 @@ function sidebarLink(item: typeof ALL_NAV_ITEMS[0], activePage: string): string 
         </li>`;
 }
 
-export function layout(title: string, content: string, user: { display_name: string; role: string }, activePage: string): string {
+export function layout(
+  title: string,
+  content: string,
+  user: { display_name: string; role: string },
+  activePage: string,
+): string {
   const userRole = user.role as Role;
-  const visibleItems = ALL_NAV_ITEMS.filter((item) => hasPermission(userRole, item.id));
-  const sidebarLinks = visibleItems.map(item => sidebarLink(item, activePage)).join('\n          ');
+  const visibleItems = ALL_NAV_ITEMS.filter((item) =>
+    hasPermission(userRole, item.id),
+  );
+  const sidebarLinks = visibleItems
+    .map((item) => sidebarLink(item, activePage))
+    .join("\n          ");
 
   return `<!DOCTYPE html>
 <html lang="vi" dir="ltr" data-color-theme="Blue_Theme" data-layout="vertical" data-card="border" data-header-position="fixed">
@@ -52,19 +130,18 @@ export function layout(title: string, content: string, user: { display_name: str
 </head>
 <body class="bg-lightgray dark:bg-dark" data-sidebartype="full">
 
-  <aside id="application-sidebar-brand"
-    class="left-sidebar hs-overlay hs-overlay-open:translate-x-0 -translate-x-full xl:translate-x-0 fixed top-0 left-0 bottom-0 z-[60] w-[270px] bg-white dark:bg-dark border-r border-border dark:border-darkborder transition-transform duration-300 print:hidden">
+  <div id="htql-sidebar-backdrop" class="htql-sidebar-backdrop" onclick="htqlCloseSidebar()"></div>
+
+  <aside id="htql-sidebar"
+    class="left-sidebar htql-sidebar fixed top-0 left-0 bottom-0 z-[60] w-[270px] bg-white dark:bg-dark border-r border-border dark:border-darkborder print:hidden">
     <div class="brand-logo py-5 px-5 flex justify-between items-center border-b border-light-dark">
       <a href="/" class="flex items-center gap-2.5">
         <img src="/assets/images/logos/logoIcon.svg" alt="HTQLVT" class="h-8 w-8" />
         <span class="hide-menu text-lg font-semibold text-dark dark:text-white">Hệ thống Quản lý</span>
       </a>
-      <button type="button" class="xl:hidden header-link-btn p-0" data-hs-overlay="#application-sidebar-brand" aria-label="Đóng menu">
-        <iconify-icon icon="solar:close-circle-linear" class="text-xl"></iconify-icon>
-      </button>
     </div>
     <div class="scroll-sidebar" data-simplebar="">
-      <nav class="hs-accordion-group p-4 w-full flex flex-col">
+      <nav class="p-4 w-full flex flex-col">
         <ul id="sidebarnav" class="flex flex-col gap-0.5">
           ${sidebarLinks}
         </ul>
@@ -73,10 +150,10 @@ export function layout(title: string, content: string, user: { display_name: str
   </aside>
 
   <div class="page-wrapper">
-    <header class="topbar app-header fixed top-0 right-0 z-50 bg-white dark:bg-dark border-b border-light-dark print:hidden">
+    <header class="topbar app-header htql-topbar fixed top-0 z-50 bg-white dark:bg-dark border-b border-light-dark print:hidden">
       <div class="flex items-center justify-between h-16 px-5 lg:px-6">
         <div class="flex items-center gap-3">
-          <button type="button" class="xl:hidden header-link-btn" data-hs-overlay="#application-sidebar-brand" aria-label="Mở menu">
+          <button type="button" class="htql-menu-btn header-link-btn" onclick="htqlToggleSidebar()" aria-label="Mở menu">
             <iconify-icon icon="solar:hamburger-menu-linear" class="text-xl"></iconify-icon>
           </button>
         </div>
@@ -107,12 +184,27 @@ export function layout(title: string, content: string, user: { display_name: str
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/preline@2.7.0/dist/preline.min.js"></script>
   <script src="/assets/js/app.init.js"></script>
-  <script src="/assets/js/app.min.js"></script>
   <script src="/assets/js/htql-modal.js"></script>
+  <script src="/assets/js/htql-table.js"></script>
   <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
   <script>
+    /* ── Sidebar toggle ─────────────────────────────────── */
+    (function () {
+      window.htqlToggleSidebar = function () {
+        document.getElementById('htql-sidebar').classList.toggle('htql-sidebar-open');
+        document.getElementById('htql-sidebar-backdrop').classList.toggle('htql-sidebar-backdrop-visible');
+      };
+      window.htqlCloseSidebar = function () {
+        document.getElementById('htql-sidebar').classList.remove('htql-sidebar-open');
+        document.getElementById('htql-sidebar-backdrop').classList.remove('htql-sidebar-backdrop-visible');
+      };
+      window.addEventListener('resize', function () {
+        if (window.innerWidth >= 1300) htqlCloseSidebar();
+      });
+    })();
+
+    /* ── Theme toggle ───────────────────────────────────── */
     (function () {
       var btn = document.getElementById('theme-toggle');
       if (!btn) return;

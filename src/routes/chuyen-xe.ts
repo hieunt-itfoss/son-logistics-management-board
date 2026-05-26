@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, ChuyenXe, Tuyen, Xe, LoHang } from '../types';
 import { layout } from '../utils/layout';
-import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, badge } from '../utils/ui';
+import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, badge, searchField } from '../utils/ui';
 
 // ─── Joined-row types ───────────────────────────────────────────────
 interface ChuyenRow extends ChuyenXe {
@@ -93,6 +93,10 @@ chuyenXeRoutes.get('/', async (c) => {
   const to = c.req.query('to') || '';
   const tuyenFilter = c.req.query('tuyen') || '';
   const statusFilter = c.req.query('status') || '';
+  const xeFilter = c.req.query('xe') || '';
+  const bienSoFilter = c.req.query('bien_so') || '';
+  const ctyVtFilter = c.req.query('cty_vt') || '';
+  const taiXeFilter = c.req.query('tai_xe') || '';
   const q = (c.req.query('q') || '').toLowerCase().trim();
 
   const conds: string[] = [];
@@ -119,6 +123,10 @@ chuyenXeRoutes.get('/', async (c) => {
   }
   if (tuyenFilter) { conds.push('cx.tuyen_id = ?'); params.push(tuyenFilter); }
   if (statusFilter) { conds.push('cx.trang_thai = ?'); params.push(statusFilter); }
+  if (xeFilter) { conds.push('x.so_xe = ?'); params.push(xeFilter); }
+  if (bienSoFilter) { conds.push('x.bien_so = ?'); params.push(bienSoFilter); }
+  if (ctyVtFilter) { conds.push('x.cty_vt_id = ?'); params.push(ctyVtFilter); }
+  if (taiXeFilter) { conds.push('cx.tai_xe_id = ?'); params.push(taiXeFilter); }
 
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 
@@ -145,7 +153,12 @@ chuyenXeRoutes.get('/', async (c) => {
     );
   }
 
-  const tuyenList = await db.prepare('SELECT id, ten FROM tuyen ORDER BY ten').all<Tuyen>();
+  const [tuyenList, xeList, ctyVtList, taiXeList] = await Promise.all([
+    db.prepare('SELECT id, ten FROM tuyen ORDER BY ten').all<Tuyen>(),
+    db.prepare('SELECT DISTINCT so_xe, bien_so FROM xe ORDER BY so_xe').all<{ so_xe: string; bien_so: string }>(),
+    db.prepare('SELECT id, ten FROM cty_van_tai ORDER BY ten').all<CtyVTRow>(),
+    db.prepare("SELECT id, ten FROM nhan_vien WHERE vai_tro = 'laixe' ORDER BY ten").all<TaiXeRow>(),
+  ]);
 
   const tongBy: Record<string, number> = {};
   const tongNo: Record<string, number> = {};
@@ -161,6 +174,18 @@ chuyenXeRoutes.get('/', async (c) => {
 
   const tuyenOpts = (tuyenList.results as Tuyen[])
     .map(t => `<option value="${t.id}"${t.id === tuyenFilter ? ' selected' : ''}>${esc(t.ten)}</option>`).join('');
+
+  const xeOpts = (xeList.results as { so_xe: string; bien_so: string }[])
+    .map(x => `<option value="${esc(x.so_xe)}"${x.so_xe === xeFilter ? ' selected' : ''}>${esc(x.so_xe)}</option>`).join('');
+
+  const bienSoOpts = (xeList.results as { so_xe: string; bien_so: string }[])
+    .map(x => `<option value="${esc(x.bien_so)}"${x.bien_so === bienSoFilter ? ' selected' : ''}>${esc(x.bien_so)}</option>`).join('');
+
+  const ctyVtOpts = (ctyVtList.results as CtyVTRow[])
+    .map(c => `<option value="${c.id}"${c.id === ctyVtFilter ? ' selected' : ''}>${esc(c.ten)}</option>`).join('');
+
+  const taiXeOpts = (taiXeList.results as TaiXeRow[])
+    .map(tx => `<option value="${tx.id}"${tx.id === taiXeFilter ? ' selected' : ''}>${esc(tx.ten)}</option>`).join('');
 
   const rows = chuyens.map(ch => {
     const ttVariant = ch.trang_thai === 'hoan_thanh' ? 'success' : ch.trang_thai === 'huy' ? 'error' : ch.trang_thai === 'dang_chay' ? 'primary' : 'neutral';
@@ -187,7 +212,7 @@ chuyenXeRoutes.get('/', async (c) => {
     ], { align: 'center' });
   }).join('');
 
-  const hasFilter = q || tuyenFilter || statusFilter || range !== 'all';
+  const hasFilter = q || tuyenFilter || statusFilter || xeFilter || bienSoFilter || ctyVtFilter || taiXeFilter || range !== 'all';
   const content = `
     ${pageHeader('Chuyến xe', {
       actions: `<a href="/chuyen-xe/create" class="btn flex items-center gap-2"><iconify-icon icon="solar:add-circle-linear"></iconify-icon> Chuyến mới</a>`,
@@ -213,26 +238,50 @@ chuyenXeRoutes.get('/', async (c) => {
             <input type="date" name="to" value="${esc(to)}" class="border border-gray-300 rounded-md px-3 py-2 text-sm"></div>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Tuy\u1ebfn</label>
-          <select name="tuyen" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">\u2014 T\u1ea5t c\u1ea3 \u2014</option>${tuyenOpts}
+          <label class="block text-xs font-medium text-gray-500 mb-1">Số xe</label>
+          <select name="xe" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <option value="">— Tất cả —</option>${xeOpts}
           </select>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Tr\u1ea1ng th\u00e1i</label>
-          <select name="status" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">\u2014 T\u1ea5t c\u1ea3 \u2014</option>
-            <option value="planned"${statusFilter === 'planned' ? ' selected' : ''}>K\u1ebf ho\u1ea1ch</option>
-            <option value="dang_chay"${statusFilter === 'dang_chay' ? ' selected' : ''}>\u0110ang ch\u1ea1y</option>
-            <option value="hoan_thanh"${statusFilter === 'hoan_thanh' ? ' selected' : ''}>Ho\u00e0n th\u00e0nh</option>
-            <option value="huy"${statusFilter === 'huy' ? ' selected' : ''}>H\u1ee7y</option>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Biển số</label>
+          <select name="bien_so" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <option value="">— Tất cả —</option>${bienSoOpts}
           </select>
         </div>
-        <div class="flex-1 min-w-[240px]">
-          <label class="block text-xs font-medium text-gray-500 mb-1">T\u00ecm ki\u1ebfm</label>
-          <input type="text" name="q" value="${esc(q)}" placeholder="M\u00e3 chuy\u1ebfn, bi\u1ec3n s\u1ed1, tuy\u1ebfn, t\u00e0i x\u1ebf..." class="w-full border-2 border-blue-400 rounded-md px-3 py-2 text-sm">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Tuyến</label>
+          <select name="tuyen" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <option value="">— Tất cả —</option>${tuyenOpts}
+          </select>
         </div>
-        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm cursor-pointer">L\u1ecdc</button>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Cty VT</label>
+          <select name="cty_vt" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <option value="">— Tất cả —</option>${ctyVtOpts}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Tài xế</label>
+          <select name="tai_xe" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <option value="">— Tất cả —</option>${taiXeOpts}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Trạng thái</label>
+          <select name="status" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <option value="">— Tất cả —</option>
+            <option value="planned"${statusFilter === 'planned' ? ' selected' : ''}>Kế hoạch</option>
+            <option value="dang_chay"${statusFilter === 'dang_chay' ? ' selected' : ''}>Đang chạy</option>
+            <option value="hoan_thanh"${statusFilter === 'hoan_thanh' ? ' selected' : ''}>Hoàn thành</option>
+            <option value="huy"${statusFilter === 'huy' ? ' selected' : ''}>Hủy</option>
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs font-medium text-bodytext dark:text-darklink mb-1">Tìm kiếm</label>
+          ${searchField({ value: esc(q), placeholder: 'Mã chuyến, biển số, tuyến, tài xế...' })}
+        </div>
+        <button type="submit" class="btn text-sm cursor-pointer">Lọc</button>
         ${hasFilter ? '<a href="/chuyen-xe" class="text-error hover:underline text-sm">Xóa lọc</a>' : ''}
       </form>
       </div>

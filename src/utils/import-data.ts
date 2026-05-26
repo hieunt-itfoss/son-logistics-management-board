@@ -9,10 +9,40 @@ export interface ParsedTable {
   rows: Record<string, string>[];
 }
 
+function splitCsvLine(line: string, delim: string): string[] {
+  const cells: string[] = [];
+  let cur = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuote) {
+      if (ch === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuote = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuote = true;
+    } else if (ch === delim) {
+      cells.push(cur.trim());
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
 export function parseDelimitedText(text: string): ParsedTable {
   let t = text;
   if (t.charCodeAt(0) === 0xfeff) t = t.slice(1);
-  const lines = t.split(/\r?\n/).filter((l) => l.length > 0 || l.trim());
+  const lines = t.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 1) return { headers: [], rows: [] };
 
   const first = lines[0];
@@ -21,13 +51,13 @@ export function parseDelimitedText(text: string): ParsedTable {
     delim = first.includes(';') && first.split(';').length > first.split(',').length ? ';' : ',';
   }
 
-  const rawHeaders = lines[0].split(delim).map((h) => h.trim());
+  const rawHeaders = splitCsvLine(lines[0], delim);
   const headers = rawHeaders.map((h) =>
     h.replace(/^\*+/, '').replace(/\s*\(.*?\)\s*$/g, '').trim().toLowerCase(),
   );
 
   const rows = lines.slice(1).filter((l) => l.trim()).map((line) => {
-    const cells = line.split(delim).map((c) => c.trim());
+    const cells = splitCsvLine(line, delim);
     const row: Record<string, string> = {};
     headers.forEach((h, i) => {
       row[h] = cells[i] || '';

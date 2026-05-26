@@ -16,6 +16,7 @@ import {
   input,
   select,
   textarea,
+  searchField,
 } from '../utils/ui';
 
 export const doiTacRoutes = new Hono<{ Bindings: Env }>();
@@ -62,12 +63,7 @@ const DM_GROUP_LABEL: Record<string, string> = {
 };
 
 function doiTacSearchField(search: string): string {
-  return `<div class="relative shrink-0 min-w-[200px]">
-    <input name="q" type="text" autocomplete="off" value="${esc(search)}" placeholder="Tìm..." class="form-control w-full min-w-[200px] pr-10">
-    <button type="submit" class="absolute right-0 top-0 bottom-0 flex items-center px-3 text-bodytext hover:text-primary cursor-pointer" title="Tìm" aria-label="Tìm">
-      <iconify-icon icon="solar:magnifer-broken" class="text-lg"></iconify-icon>
-    </button>
-  </div>`;
+  return searchField({ value: search, placeholder: 'Tìm tên, mã, SĐT...' });
 }
 
 function canhBaoTag(quaHan: number): string {
@@ -148,7 +144,10 @@ doiTacRoutes.get('/', async (c) => {
           </div>
           ${formGroup('Địa chỉ', input({ name: 'dia_chi', id: 'kh_dc' }))}
           ${formGroup('SĐT', input({ name: 'sdt', id: 'kh_sdt' }))}
-          ${formGroup('Đánh giá', select({ name: 'danh_gia', id: 'kh_dg', options: '<option value="">Mặc định</option><option value="binhthuong">🟡 Bình thường</option><option value="canhbao">🔴 Cảnh báo</option>' }))}
+          <div class="grid grid-cols-2 gap-4">
+            ${formGroup('Đánh giá', select({ name: 'danh_gia', id: 'kh_dg', options: '<option value="">Mặc định</option><option value="binhthuong">🟡 Bình thường</option><option value="canhbao">🔴 Cảnh báo</option>' }))}
+            ${formGroup('Tiền tệ', select({ name: 'tien_te', id: 'kh_tiente', options: '<option value="PLN">PLN</option><option value="EUR">EUR</option><option value="USD">USD</option>' }))}
+          </div>
           ${formGroup('Ghi chú', textarea({ name: 'ghi_chu', id: 'kh_ghichu', rows: '2' }))}
         </form>`,
       footer: modalFooterSplit(
@@ -178,12 +177,20 @@ doiTacRoutes.get('/', async (c) => {
       id: 'ctyModal',
       title: '+ Cty VT mới',
       titleId: 'ctyModalTitle',
-      size: 'lg',
+      size: 'xl',
       body: `<form id="ctyForm" method="POST" action="/doi-tac/api/cty-vt" class="space-y-4">
           <input type="hidden" name="id" id="cty_id">
-          ${formGroup('Tên công ty', input({ name: 'ten', id: 'cty_ten', required: true }), { required: true })}
+          <div class="grid grid-cols-2 gap-4">
+            ${formGroup('Tên ngắn', input({ name: 'ten_ngan', id: 'cty_ten_ngan', placeholder: 'VD: SonLog' }))}
+            ${formGroup('Tên đầy đủ', input({ name: 'ten', id: 'cty_ten', required: true, placeholder: 'Tên pháp lý đầy đủ' }), { required: true })}
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            ${formGroup('NIP', input({ name: 'nip', id: 'cty_nip', placeholder: 'Mã số thuế' }))}
+            ${formGroup('Email', input({ type: 'email', name: 'email', id: 'cty_email' }))}
+          </div>
           ${formGroup('Địa chỉ', input({ name: 'dia_chi', id: 'cty_dc' }))}
           ${formGroup('SĐT', input({ name: 'sdt', id: 'cty_sdt' }))}
+          ${formGroup('Ghi chú (tuyến hay chạy...)', textarea({ name: 'ghi_chu', id: 'cty_ghichu', rows: '2' }))}
         </form>`,
       footer: modalFooterSplit(
         `<span id="ctyDelBtn" class="hidden">${btnDanger('Xoá', { onclick: 'deleteCty()' })}</span>`,
@@ -209,6 +216,7 @@ doiTacRoutes.get('/', async (c) => {
           document.getElementById('kh_dc').value = d.dia_chi || '';
           document.getElementById('kh_sdt').value = d.sdt || '';
           document.getElementById('kh_dg').value = d.danh_gia || '';
+          document.getElementById('kh_tiente').value = d.tien_te || 'PLN';
           document.getElementById('kh_ghichu').value = d.ghi_chu || '';
         });
       } else {
@@ -268,8 +276,12 @@ doiTacRoutes.get('/', async (c) => {
         fetch('/doi-tac/api/cty-vt/' + id).then(r => r.json()).then(d => {
           document.getElementById('cty_id').value = d.id;
           document.getElementById('cty_ten').value = d.ten || '';
+          document.getElementById('cty_ten_ngan').value = d.ten_ngan || '';
+          document.getElementById('cty_nip').value = d.nip || '';
+          document.getElementById('cty_email').value = d.email || '';
           document.getElementById('cty_dc').value = d.dia_chi || '';
           document.getElementById('cty_sdt').value = d.sdt || '';
+          document.getElementById('cty_ghichu').value = d.ghi_chu || '';
         });
       } else {
         document.getElementById('ctyModalTitle').textContent = '+ Cty VT mới';
@@ -518,6 +530,7 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
       dgBadge(dg),
       cbBadge || '—',
       esc(kh.nip || '—'),
+      `<span class="font-medium">${esc((kh as KhachRow & { tien_te?: string }).tien_te || 'PLN')}</span>`,
       `<span class="text-right block">${kh.han_tt || 30}d</span>`,
       `<span class="text-right block">${bgStr}</span>`,
       `<span class="text-right block ${stock > 0 ? 'text-primary font-medium' : ''}">${stock > 0 ? stock : '0'}</span>`,
@@ -552,14 +565,14 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
       <div class="overflow-x-auto">
         <table class="htql-table min-w-full w-full text-sm">
           <thead><tr class="border-b border-light-dark">
-            ${th('Mã')}${th('Tên')}${th('Đánh giá')}${th('Cảnh báo')}${th('NIP')}
+            ${th('Mã')}${th('Tên')}${th('Đánh giá')}${th('Cảnh báo')}${th('NIP')}${th('Tiền tệ')}
             ${th('Hạn', { align: 'right' })}${th('Đơn giá', { align: 'right' })}${th('Tồn', { align: 'right' })}
             ${th('Nợ VT', { align: 'right' })}${th('Nợ TH', { align: 'right' })}${th('Phí kho', { align: 'right' })}
             ${th('Tổng nợ', { align: 'right' })}${th('')}
           </tr></thead>
           <tbody class="divide-y divide-border dark:divide-darkborder">${rows}
             <tr class="bg-lightwarning font-semibold border-t-2 border-warning/30">
-              <td colspan="8" class="text-right py-3">Tổng ${sorted.length} khách</td>
+              <td colspan="9" class="text-right py-3">Tổng ${sorted.length} khách</td>
               <td class="text-right">${fmtTotM(tongAllNoVT)}</td>
               <td class="text-right">${fmtTotM(tongAllNoTH)}</td>
               <td class="text-right">${tongAllPhiKho > 0 ? fmtNum(tongAllPhiKho) + ' PLN' : '—'}</td>
@@ -714,7 +727,10 @@ async function renderCtyList(db: D1Database, search: string): Promise<string> {
     const ql = search.toLowerCase();
     sorted = sorted.filter(c =>
       (String(c.ten || '')).toLowerCase().includes(ql) ||
-      (String(c.dia_chi || '')).toLowerCase().includes(ql)
+      (String(c.ten_ngan || '')).toLowerCase().includes(ql) ||
+      (String(c.nip || '')).toLowerCase().includes(ql) ||
+      (String(c.dia_chi || '')).toLowerCase().includes(ql) ||
+      (String(c.sdt || '')).toLowerCase().includes(ql)
     );
   }
 
@@ -733,12 +749,17 @@ async function renderCtyList(db: D1Database, search: string): Promise<string> {
     }
 
     const isOver = Object.values(cn.con_no).some(v => v > 0);
+    const tenNgan = String(c.ten_ngan || '');
+    const tenDisplay = tenNgan
+      ? `<a href="/doi-tac/cty-vt/${id}" class="text-primary hover:underline font-medium">${esc(tenNgan)}</a><div class="text-xs text-bodytext dark:text-darklink">${esc(String(c.ten || ''))}</div>`
+      : `<a href="/doi-tac/cty-vt/${id}" class="text-primary hover:underline font-medium">${esc(String(c.ten || ''))}</a>`;
 
     return tableRow([
       `<span class="font-mono text-bodytext">${esc(id)}</span>`,
-      `<a href="/doi-tac/cty-vt/${id}" class="text-primary hover:underline font-medium">${esc(String(c.ten || ''))}</a>
-        <div class="text-xs text-bodytext">${esc(String(c.dia_chi || ''))}</div>`,
+      tenDisplay,
+      esc(String(c.nip || '—')),
       esc(String(c.dia_chi || '—')),
+      esc(String(c.sdt || '—')),
       `<span class="text-right block">${Number(c.xe_count || 0)}</span>`,
       `<span class="text-right block">${fmtCnKey(cn, 'phai_tra')}</span>`,
       `<span class="text-right block text-success">${fmtCnKey(cn, 'da_tra')}</span>`,
@@ -763,12 +784,12 @@ async function renderCtyList(db: D1Database, search: string): Promise<string> {
       <div class="overflow-x-auto">
         <table class="htql-table min-w-full w-full text-sm">
           <thead><tr class="border-b border-light-dark">
-            ${th('Mã')}${th('Tên')}${th('Địa chỉ')}${th('Xe', { align: 'right' })}
+            ${th('Mã')}${th('Tên')}${th('NIP')}${th('Địa chỉ')}${th('SĐT')}${th('Xe', { align: 'right' })}
             ${th('Phải trả', { align: 'right' })}${th('Đã trả', { align: 'right' })}${th('Còn nợ', { align: 'right' })}${th('')}
           </tr></thead>
           <tbody class="divide-y divide-border dark:divide-darkborder">${rows}
             <tr class="bg-lightwarning font-semibold border-t-2 border-warning/30">
-              <td colspan="4" class="text-right py-3">Tổng tất cả cty VT</td>
+              <td colspan="6" class="text-right py-3">Tổng tất cả cty VT</td>
               <td class="text-right">${fmtAllKey('phai_tra')}</td>
               <td class="text-right text-success">${fmtAllKey('da_tra')}</td>
               <td class="text-right text-error font-bold">${fmtAllKey('con_no')}</td>
@@ -1156,8 +1177,10 @@ doiTacRoutes.get('/cty-vt/:id', async (c) => {
     <div class="bg-gradient-to-r from-cyan-600 to-cyan-800 rounded-xl p-6 text-white mb-6">
       <div class="flex justify-between items-start flex-wrap gap-4">
         <div>
-          <h1 class="text-2xl font-bold">🚛 ${esc(String(cty.ten || ''))}</h1>
-          <p class="text-cyan-100 mt-1 text-sm">${esc(String(cty.id))} · ${esc(String(cty.dia_chi || ''))} · ${esc(String(cty.sdt || '—'))}</p>
+          <h1 class="text-2xl font-bold">🚛 ${esc(String(cty.ten_ngan || cty.ten || ''))}</h1>
+          ${String(cty.ten_ngan || '') ? `<p class="text-cyan-200 text-sm">${esc(String(cty.ten || ''))}</p>` : ''}
+          <p class="text-cyan-100 mt-1 text-sm">${esc(String(cty.id))}${String(cty.nip || '') ? ` · NIP: ${esc(String(cty.nip))}` : ''} · ${esc(String(cty.dia_chi || ''))} · ${esc(String(cty.sdt || '—'))}${String(cty.email || '') ? ` · ${esc(String(cty.email))}` : ''}</p>
+          ${String(cty.ghi_chu || '') ? `<p class="text-cyan-200 text-xs mt-2">📝 ${esc(String(cty.ghi_chu))}</p>` : ''}
         </div>
         <button onclick="openCtyModal('${String(cty.id)}')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm cursor-pointer">✏ Sửa</button>
       </div>
@@ -1283,6 +1306,7 @@ doiTacRoutes.post('/api/khach-hang', async (c) => {
   const diaChi = String(body.dia_chi || '');
   const sdt = String(body.sdt || '');
   const danhGia = String(body.danh_gia || '');
+  const tienTe = String(body.tien_te || 'PLN');
   const ghiChu = String(body.ghi_chu || '');
 
   const db = c.env.DB;
@@ -1290,15 +1314,15 @@ doiTacRoutes.post('/api/khach-hang', async (c) => {
 
   if (id) {
     await db.prepare(
-      `UPDATE khach_hang SET ten=?, nip=?, han_tt=?, dia_chi=?, sdt=?, danh_gia=?, ghi_chu=?, danh_gia_manual=?, updated_at=?
+      `UPDATE khach_hang SET ten=?, nip=?, han_tt=?, dia_chi=?, sdt=?, danh_gia=?, tien_te=?, ghi_chu=?, danh_gia_manual=?, updated_at=?
        WHERE id=?`
-    ).bind(ten, nip, hanTT, diaChi, sdt, danhGia, ghiChu, danhGia, now, id).run();
+    ).bind(ten, nip, hanTT, diaChi, sdt, danhGia, tienTe, ghiChu, danhGia, now, id).run();
   } else {
     const newId = `KH-${Date.now()}`;
     await db.prepare(
-      `INSERT INTO khach_hang (id, ma_kh, ten, nip, dia_chi, sdt, han_tt, ghi_chu, danh_gia, danh_gia_manual, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(newId, maKh, ten, nip, diaChi, sdt, hanTT, ghiChu, danhGia, danhGia, now, now).run();
+      `INSERT INTO khach_hang (id, ma_kh, ten, nip, dia_chi, sdt, han_tt, ghi_chu, danh_gia, danh_gia_manual, tien_te, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(newId, maKh, ten, nip, diaChi, sdt, hanTT, ghiChu, danhGia, danhGia, tienTe, now, now).run();
   }
 
   return c.redirect('/doi-tac?sub=khach');
@@ -1336,21 +1360,26 @@ doiTacRoutes.post('/api/cty-vt', async (c) => {
   const body = await c.req.parseBody();
   const id = String(body.id || '');
   const ten = String(body.ten || '');
+  const tenNgan = String(body.ten_ngan || '');
+  const nip = String(body.nip || '');
+  const email = String(body.email || '');
   const diaChi = String(body.dia_chi || '');
   const sdt = String(body.sdt || '');
+  const ghiChu = String(body.ghi_chu || '');
 
   const db = c.env.DB;
   const now = new Date().toISOString();
 
   if (id) {
     await db.prepare(
-      `UPDATE cty_van_tai SET ten=?, dia_chi=?, sdt=?, updated_at=? WHERE id=?`
-    ).bind(ten, diaChi, sdt, now, id).run();
+      `UPDATE cty_van_tai SET ten=?, ten_ngan=?, nip=?, email=?, dia_chi=?, sdt=?, ghi_chu=?, updated_at=? WHERE id=?`
+    ).bind(ten, tenNgan, nip, email, diaChi, sdt, ghiChu, now, id).run();
   } else {
     const newId = `CVT-${Date.now()}`;
     await db.prepare(
-      `INSERT INTO cty_van_tai (id, ten, dia_chi, sdt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(newId, ten, diaChi, sdt, now, now).run();
+      `INSERT INTO cty_van_tai (id, ten, ten_ngan, nip, email, dia_chi, sdt, ghi_chu, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(newId, ten, tenNgan, nip, email, diaChi, sdt, ghiChu, now, now).run();
   }
 
   return c.redirect('/doi-tac?sub=cty');

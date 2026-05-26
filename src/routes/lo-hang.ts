@@ -8,6 +8,7 @@ import {
   btnModalChip,
   btnSecondary,
   btnModalOutline,
+  searchField,
 } from '../utils/ui';
 import {
   parseDelimitedText,
@@ -380,34 +381,33 @@ loHangRoutes.get('/', async (c) => {
       displayVal = fmtDate(filterVal);
     }
     filterChips.push(`
-      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+      <span class="htql-chip">
         <strong>${def?.label || filterCol}:</strong> ${esc(displayVal)}
-        <a href="${buildGridUrl(c, { fc:'', fv:'' })}" class="ml-1 text-blue-400 hover:text-blue-700">&times;</a>
+        <a href="${buildGridUrl(c, { fc:'', fv:'' })}" class="htql-chip-remove">&times;</a>
       </span>
     `);
   }
 
   // ─── Build HTML ────────────────────────────────────────────
-  let html = '<div class="card overflow-hidden">';
+  let html = '<div class="htql-dt" data-htql-dt>';
 
   // Toolbar
-  html += '<div class="card-body border-b border-light-dark flex flex-wrap items-center gap-2">';
+  html += '<div class="htql-dt-toolbar">';
   if (perm.canCreateLo) {
-    html += `<a href="/lo-hang/create" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
+    html += `<a href="/lo-hang/create" class="btn flex items-center gap-1.5 cursor-pointer text-sm">
       <iconify-icon icon="solar:add-circle-linear"></iconify-icon> Phiếu mới
     </a>`;
-    html += `<button type="button" onclick="openImportModal()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
-      <iconify-icon icon="solar:import-linear"></iconify-icon> Import dữ liệu
+    html += `<button type="button" onclick="openImportModal()" class="htql-dt-btn">
+      <iconify-icon icon="solar:import-linear"></iconify-icon> Import
     </button>`;
   }
   html += `<form method="GET" action="/lo-hang" class="flex flex-wrap items-center gap-2" id="filterForm">`;
-  // Hidden fields to preserve state
   html += `<input type="hidden" name="fc" value="${esc(filterCol)}">`;
   html += `<input type="hidden" name="fv" value="${esc(filterVal)}">`;
   html += `<input type="hidden" name="hide" value="${esc(hiddenCols)}">`;
   html += `<input type="hidden" name="collapsed" value="${esc(collapsedParam)}">`;
 
-  html += `<select name="range" onchange="this.form.submit()" class="border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+  html += `<select name="range" onchange="this.form.submit()" class="htql-dt-select">
     <option value="today" ${filterRange==='today'?'selected':''}>Hôm nay</option>
     <option value="thisWeek" ${filterRange==='thisWeek'?'selected':''}>Tuần này</option>
     <option value="thisMonth" ${filterRange==='thisMonth'?'selected':''}>Tháng này</option>
@@ -416,39 +416,37 @@ loHangRoutes.get('/', async (c) => {
   </select>`;
 
   if (filterRange === 'custom') {
-    html += `<input type="date" name="from" value="${esc(customFrom)}" onchange="this.form.submit()" class="border border-gray-300 rounded-md px-2 py-2 text-sm">`;
-    html += `<span class="text-gray-400 text-sm">\u2192</span>`;
-    html += `<input type="date" name="to" value="${esc(customTo)}" onchange="this.form.submit()" class="border border-gray-300 rounded-md px-2 py-2 text-sm">`;
+    html += `<input type="date" name="from" value="${esc(customFrom)}" onchange="this.form.submit()" class="htql-dt-date">`;
+    html += `<span class="text-bodytext dark:text-darklink text-sm">\u2192</span>`;
+    html += `<input type="date" name="to" value="${esc(customTo)}" onchange="this.form.submit()" class="htql-dt-date">`;
   }
 
-  html += `<input type="text" name="q" value="${esc(freeSearch)}" placeholder="Tìm tự do (mã, khách, hãng, xe, tuyến...)" class="border border-gray-300 rounded-md px-3 py-2 text-sm min-w-[240px]" style="min-width:240px">`;
-  html += `<button type="submit" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300">Tìm</button>`;
+  html += searchField({ value: freeSearch, placeholder: 'Tìm mã, khách, hãng, xe, tuyến...' });
   html += `</form>`;
 
-  html += `<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+  html += `<button onclick="document.getElementById('colTogglePanel').classList.toggle('hidden')" class="htql-dt-btn">
+  <iconify-icon icon="solar:settings-linear"></iconify-icon> Cột (${cols.length}/${ALL_COLS.length})
+  </button>`;
+
+  html += `<span class="htql-chip">
     <iconify-icon icon="solar:sort-from-top-to-bottom-linear"></iconify-icon> Group: Chuyến
   </span>`;
-
-  // Column visibility toggle
-  html += `<button onclick="document.getElementById('colTogglePanel').classList.toggle('hidden')" class="px-3 py-1.5 rounded-md text-sm border border-gray-300 bg-white hover:bg-gray-50 text-gray-600">
-    <iconify-icon icon="solar:settings-linear"></iconify-icon> Cột (${cols.length}/${ALL_COLS.length})
-  </button>`;
 
   html += `</div>`;
 
   // Filter chips
   if (filterChips.length > 0) {
-    html += `<div class="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-gray-200 bg-blue-50">`;
-    html += `<span class="text-xs text-gray-500">Bộ lọc:</span>`;
+    html += `<div class="htql-dt-chips">`;
+    html += `<span class="text-xs text-bodytext dark:text-darklink">Bộ lọc:</span>`;
     filterChips.forEach(chip => html += chip);
-    html += `<a href="/lo-hang?range=${filterRange}" class="text-xs text-red-500 hover:text-red-700">Xoá tất cả</a>`;
+    html += `<a href="/lo-hang?range=${filterRange}" class="text-xs text-error hover:underline">Xoá tất cả</a>`;
     html += `</div>`;
   }
 
   // Column visibility panel (hidden by default)
   const permCols: ColKey[] = perm.loCols === 'all' ? [...ALL_COLS] : [...perm.loCols];
-  html += `<div id="colTogglePanel" class="hidden border-b border-gray-200 bg-yellow-50 px-4 py-3">
-    <div class="text-xs font-semibold text-gray-600 mb-2">Hiển thị cột:</div>
+  html += `<div id="colTogglePanel" class="hidden htql-dt-col-panel">
+    <div class="text-xs font-semibold text-dark dark:text-white mb-2">Hiển thị cột:</div>
     <form method="GET" action="/lo-hang" class="flex flex-wrap gap-3" id="colForm">
       <input type="hidden" name="range" value="${esc(filterRange)}">
       <input type="hidden" name="q" value="${esc(freeSearch)}">
@@ -458,55 +456,60 @@ loHangRoutes.get('/', async (c) => {
   permCols.forEach(col => {
     const def = COL_DEFS[col];
     const checked = cols.includes(col);
-    html += `<label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer">
-      <input type="checkbox" name="hide_check" value="${col}" ${checked ? 'checked' : ''} class="rounded border-gray-300"> ${def?.label || col}
+    html += `<label class="flex items-center gap-1 text-xs text-dark dark:text-darklink cursor-pointer">
+      <input type="checkbox" name="hide_check" value="${col}" ${checked ? 'checked' : ''} class="rounded border-bordergray"> ${def?.label || col}
     </label>`;
   });
-  html += `<button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded text-xs" id="colToggleSubmit">Áp dụng</button>
+  html += `<button type="submit" class="btn text-xs px-3 py-1" id="colToggleSubmit">Áp dụng</button>
     </form>
   </div>`;
 
   // Grid table
-  html += `<div class="overflow-x-auto"><table class="htql-table min-w-full text-sm" style="border-collapse:collapse">`;
-  html += `<thead class="bg-gray-100">`;
+  const totalColspan = 2 + cols.length + (perm.canEdit ? 1 : 0);
+  html += `<div class="htql-dt-scroll"><table>`;
+  html += `<thead>`;
 
   // Group header row
-  html += `<tr class="border-b border-gray-300">`;
-  html += `<th class="px-2 py-2 text-xs font-medium text-gray-500 text-center" style="width:24px"></th>`;
-  html += `<th class="px-2 py-2 text-xs font-medium text-gray-500 text-center" style="width:30px">
-    <input type="checkbox" id="selectAll" class="rounded border-gray-300" title="Chọn tất cả">
+  html += `<tr>`;
+  html += `<th style="width:28px"></th>`;
+  html += `<th style="width:32px">
+    <div class="htql-dt-th-inner" style="justify-content:center"><input type="checkbox" id="selectAll" class="rounded border-bordergray" title="Chọn tất cả"></div>
   </th>`;
   if (visibleByGroup.info.length)
-    html += `<th class="px-2 py-2 text-xs font-semibold text-gray-600 text-center border-l border-gray-300" colspan="${visibleByGroup.info.length}">Thông tin chung</th>`;
+    html += `<th class="text-center" colspan="${visibleByGroup.info.length}"><div class="htql-dt-th-inner" style="justify-content:center">Thông tin chung</div></th>`;
   if (visibleByGroup.hang.length)
-    html += `<th class="px-2 py-2 text-xs font-semibold text-center border-l border-gray-300" style="background:#f3e8ff;color:#7c3aed" colspan="${visibleByGroup.hang.length}">Nhóm HÀNG</th>`;
+    html += `<th class="htql-col-hang text-center" colspan="${visibleByGroup.hang.length}"><div class="htql-dt-th-inner" style="justify-content:center;color:#7c3aed">Nhóm HÀNG</div></th>`;
   if (visibleByGroup.money.length)
-    html += `<th class="px-2 py-2 text-xs font-semibold text-center border-l border-gray-300" style="background:#dcfce7;color:#16a34a" colspan="${visibleByGroup.money.length}">Nhóm TIỀN</th>`;
-  if (perm.canEdit) html += `<th class="px-2 py-2 text-xs font-medium text-gray-500 border-l border-gray-300" style="width:50px">Công cụ</th>`;
+    html += `<th class="htql-col-money text-center" colspan="${visibleByGroup.money.length}"><div class="htql-dt-th-inner" style="justify-content:center;color:#16a34a">Nhóm TIỀN</div></th>`;
+  if (perm.canEdit) html += `<th style="width:50px"><div class="htql-dt-th-inner">Công cụ</div></th>`;
   html += `</tr>`;
 
-  // Column header row
-  html += `<tr class="border-b border-gray-300 bg-white">`;
-  html += `<th class="px-2 py-2" style="width:24px"></th>`;
-  html += `<th class="px-2 py-2" style="width:30px"></th>`;
-  cols.forEach(col => {
+  // Column header row (sortable)
+  html += `<tr class="htql-dt-header-row">`;
+  html += `<th style="width:28px"></th>`;
+  html += `<th style="width:32px"></th>`;
+  cols.forEach((col, colIdx) => {
     const def = COL_DEFS[col];
     const isHang = def?.group === 'hang';
     const isMoney = def?.group === 'money';
-    const hasFilter = col === filterCol ? ' bg-blue-100' : '';
-    const bgClass = isHang ? 'bg-purple-50' : isMoney ? 'bg-green-50' : '';
-    const filterIcon = def?.filterable ? ` <a href="${buildFilterUrl(c, col)}" class="text-blue-500 hover:text-blue-700 no-underline" title="Lọc theo ${def?.label}">&#9662;</a>` : '';
-    html += `<th class="px-2 py-2 text-xs font-semibold text-gray-600 border-l border-gray-100 whitespace-nowrap ${bgClass}${hasFilter}">${def?.label || col}${filterIcon}</th>`;
+    const groupCls = isHang ? ' htql-col-hang' : isMoney ? ' htql-col-money' : '';
+    const hasFilter = col === filterCol ? ' style="outline:2px solid var(--primary);outline-offset:-2px"' : '';
+    const sortable = true;
+    const filterLink = def?.filterable ? ` <a href="${buildFilterUrl(c, col)}" class="text-primary hover:opacity-70 no-underline" title="Lọc theo ${def?.label}" style="font-size:10px">&#9662;</a>` : '';
+    html += `<th class="${sortable ? 'htql-dt-sortable' : ''}${groupCls}"${hasFilter}>`;
+    html += `<div class="htql-dt-th-inner">${def?.label || col}${filterLink}`;
+    if (sortable) html += ` <iconify-icon icon="solar:sort-vertical-linear" class="htql-dt-sort-icon" width="14"></iconify-icon>`;
+    html += `</div></th>`;
   });
-  if (perm.canEdit) html += `<th class="px-2 py-2 border-l border-gray-100"></th>`;
+  if (perm.canEdit) html += `<th></th>`;
   html += `</tr>`;
+
   html += `</thead><tbody>`;
 
   // Group rows and data rows
   chuyenIds.forEach(chuyenId => {
     const isNoChuyen = chuyenId === '_NO_CHUYEN_';
     const chLots = byChuyen.get(chuyenId) || [];
-    // Group summary
     const sumKien = chLots.reduce((s, l) => s + l.so_kien, 0);
     const sumDaTra = chLots.reduce((s, l) => s + l.da_tra_hang, 0);
     const sumTTByCcy: Record<string, number> = {};
@@ -517,28 +520,27 @@ loHangRoutes.get('/', async (c) => {
       if (l.so_tien_hang > 0) sumTHByCcy[tth] = (sumTHByCcy[tth] || 0) + l.so_tien_hang;
     });
     const fmtCcyMulti = (m: Record<string, number>) => {
-      const arr = Object.entries(m).filter(([, v]) => v > 0).map(([t, v]) => `${fmtNum(v)} <span class="text-xs text-gray-400">${t}</span>`);
+      const arr = Object.entries(m).filter(([, v]) => v > 0).map(([t, v]) => `${fmtNum(v)} <span class="text-xs text-bodytext dark:text-darklink">${t}</span>`);
       return arr.length ? arr.join('<br>') : '\u2014';
     };
 
     const isOpen = !collapsed.has(chuyenId);
     const collapseToggle = collapsed.has(chuyenId)
-      ? `<a href="${buildGridUrl(c, { collapsed: collapsedParam ? collapsedParam.split(',').filter(x => x !== chuyenId).join(',') : '' })}" class="text-gray-400 hover:text-gray-700 no-underline" title="Mở">&#9654;</a>`
-      : `<a href="${buildGridUrl(c, { collapsed: (collapsedParam ? collapsedParam + ',' : '') + chuyenId })}" class="text-gray-400 hover:text-gray-700 no-underline" title="Thu gọn">&#9660;</a>`;
+      ? `<a href="${buildGridUrl(c, { collapsed: collapsedParam ? collapsedParam.split(',').filter(x => x !== chuyenId).join(',') : '' })}" class="text-bodytext dark:text-darklink hover:text-primary no-underline" title="Mở">&#9654;</a>`
+      : `<a href="${buildGridUrl(c, { collapsed: (collapsedParam ? collapsedParam + ',' : '') + chuyenId })}" class="text-bodytext dark:text-darklink hover:text-primary no-underline" title="Thu gọn">&#9660;</a>`;
 
-    // Get first lo for chuyen info
     const firstLo = chLots[0];
 
-    html += `<tr class="bg-gray-50 border-b border-gray-200 cursor-pointer font-medium">`;
-    html += `<td class="px-2 py-2 text-center">${collapseToggle}</td>`;
-    html += `<td class="px-2 py-2 text-center"><input type="checkbox" class="rounded border-gray-300 group-check" data-chuyen="${esc(chuyenId)}" title="Chọn tất cả trong chuyến"></td>`;
+    html += `<tr class="htql-dt-group-row cursor-pointer" data-group-id="${esc(chuyenId)}">`;
+    html += `<td class="text-center">${collapseToggle}</td>`;
+    html += `<td class="text-center"><input type="checkbox" class="rounded border-bordergray group-check" data-chuyen="${esc(chuyenId)}" title="Chọn tất cả trong chuyến"></td>`;
     cols.forEach(col => {
       const def = COL_DEFS[col];
       const isHang = def?.group === 'hang';
       const isMoney = def?.group === 'money';
-      const tdCls = isHang ? 'bg-purple-50' : isMoney ? 'bg-green-50' : '';
+      const tdCls = isHang ? ' htql-col-hang' : isMoney ? ' htql-col-money' : '';
       let v = '';
-      if (col === 'ma') v = isNoChuyen ? `<strong style="color:#d97706">Chưa chuyến (${chLots.length})</strong>` : `<strong>${esc(chuyenId)}</strong>`;
+      if (col === 'ma') v = isNoChuyen ? `<strong class="text-warning">Chưa chuyến (${chLots.length})</strong>` : `<strong>${esc(chuyenId)}</strong>`;
       else if (col === 'ngayLenXe') v = firstLo?.ngay_di ? fmtDate(firstLo.ngay_di) : '\u2014';
       else if (col === 'ngayVe') v = firstLo?.ngay_den ? fmtDate(firstLo.ngay_den) : '\u2014';
       else if (col === 'soXe') v = esc(firstLo?.so_xe);
@@ -550,94 +552,111 @@ loHangRoutes.get('/', async (c) => {
       else if (col === 'luuKho') v = (sumKien - sumDaTra) > 0 ? `<span style="color:#7c3aed">${fmtNum(sumKien - sumDaTra)}</span>` : '0';
       else if (col === 'thanhTien') v = fmtCcyMulti(sumTTByCcy);
       else if (col === 'soTienHang') v = fmtCcyMulti(sumTHByCcy);
-      html += `<td class="px-2 py-2 text-xs border-l border-gray-100 ${tdCls}">${v}</td>`;
+      html += `<td class="text-xs${tdCls}">${v}</td>`;
     });
-    if (perm.canEdit) html += `<td class="px-2 py-2 border-l border-gray-100"></td>`;
+    if (perm.canEdit) html += `<td></td>`;
     html += `</tr>`;
 
-    // Data rows (only if expanded)
     if (isOpen) {
       chLots.forEach(lo => {
         const luuKho = lo.so_kien - lo.da_tra_hang;
-        html += `<tr class="border-b border-gray-100 hover:bg-blue-50 lo-row" data-lo-id="${esc(lo.id)}">`;
-        html += `<td class="px-2 py-2"></td>`;
-        html += `<td class="px-2 py-2 text-center"><input type="checkbox" class="rounded border-gray-300 lo-check" value="${esc(lo.id)}"></td>`;
+        html += `<tr class="lo-row" data-lo-id="${esc(lo.id)}" data-group="${esc(chuyenId)}">`;
+        html += `<td></td>`;
+        html += `<td class="text-center"><input type="checkbox" class="rounded border-bordergray lo-check" value="${esc(lo.id)}"></td>`;
         cols.forEach(col => {
           const def = COL_DEFS[col];
           const isHang = def?.group === 'hang';
           const isMoney = def?.group === 'money';
-          const tdCls = isHang ? 'bg-purple-50/50' : isMoney ? 'bg-green-50/50' : '';
+          const tdCls = isHang ? ' htql-col-hang' : isMoney ? ' htql-col-money' : '';
           const isNum = def?.cls?.includes('num') ?? false;
-          const align = isNum ? 'text-right' : '';
+          const align = isNum ? ' text-right' : '';
           let v = '';
+          let sortVal = '';
           switch(col) {
             case 'ma':
-              v = `<a href="/lo-hang/${esc(lo.id)}" class="text-blue-600 hover:underline font-medium">${esc(lo.id)}</a>`;
-              if (lo.so_kien === 0) v += ` <span class="inline-block px-1.5 py-0.5 rounded text-[10px] bg-yellow-100 text-yellow-700">tiền only</span>`;
+              v = `<a href="/lo-hang/${esc(lo.id)}" class="text-primary hover:underline font-medium">${esc(lo.id)}</a>`;
+              if (lo.so_kien === 0) v += ` <span class="inline-block px-1.5 py-0.5 rounded text-[10px] bg-lightwarning text-warning">tiền only</span>`;
+              sortVal = lo.id;
               break;
             case 'ngayLenXe':
-              v = lo.ngay_di ? `<a href="${buildGridUrl(c,{fc:'ngayLenXe',fv:lo.ngay_di})}" class="text-gray-600 hover:text-blue-600 no-underline">${fmtDate(lo.ngay_di)}</a>` : '<span class="text-yellow-600">\u2014 (chưa)</span>';
+              v = lo.ngay_di ? `<a href="${buildGridUrl(c,{fc:'ngayLenXe',fv:lo.ngay_di})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_di)}</a>` : '<span class="text-warning">\u2014 (chưa)</span>';
+              sortVal = lo.ngay_di || '';
               break;
             case 'ngayVe':
-              v = lo.ngay_den ? `<a href="${buildGridUrl(c,{fc:'ngayVe',fv:lo.ngay_den})}" class="text-gray-600 hover:text-blue-600 no-underline">${fmtDate(lo.ngay_den)}</a>` : '<span class="text-yellow-600">\u2014 (chưa)</span>';
+              v = lo.ngay_den ? `<a href="${buildGridUrl(c,{fc:'ngayVe',fv:lo.ngay_den})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_den)}</a>` : '<span class="text-warning">\u2014 (chưa)</span>';
+              sortVal = lo.ngay_den || '';
               break;
             case 'soXe':
-              v = lo.so_xe ? `<a href="${buildGridUrl(c,{fc:'soXe',fv:lo.so_xe})}" class="text-gray-600 hover:text-blue-600 no-underline">${esc(lo.so_xe)}</a>` : '<span class="text-gray-400">\u2014</span>';
+              v = lo.so_xe ? `<a href="${buildGridUrl(c,{fc:'soXe',fv:lo.so_xe})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.so_xe)}</a>` : '<span class="text-bodytext dark:text-darklink">\u2014</span>';
+              sortVal = lo.so_xe || '';
               break;
             case 'bienSo':
-              v = lo.bien_so ? `<a href="${buildGridUrl(c,{fc:'bienSo',fv:lo.bien_so})}" class="text-gray-600 hover:text-blue-600 no-underline">${esc(lo.bien_so)}</a>` : '<span class="text-gray-400">\u2014</span>';
+              v = lo.bien_so ? `<a href="${buildGridUrl(c,{fc:'bienSo',fv:lo.bien_so})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.bien_so)}</a>` : '<span class="text-bodytext dark:text-darklink">\u2014</span>';
+              sortVal = lo.bien_so || '';
               break;
             case 'tuyenVT':
               v = lo.tuyen_ten ? `<a href="${buildGridUrl(c,{fc:'tuyenVT',fv:lo.chuyen_xe_id ? '' : ''})}" class="no-underline"><span class="inline-block px-2 py-0.5 rounded text-xs font-medium" style="background:${tuyenColor(lo.tuyen_mau)}">${esc(lo.tuyen_ten)}</span></a>` : '';
+              sortVal = lo.tuyen_ten || '';
               break;
             case 'nguoiGui':
-              v = lo.hang_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiGui',fv:lo.hang_id})}" class="text-gray-600 hover:text-blue-600 no-underline">${esc(lo.hang_ten)}</a>` : '';
+              v = lo.hang_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiGui',fv:lo.hang_id})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.hang_ten)}</a>` : '';
+              sortVal = lo.hang_ten || '';
               break;
             case 'nguoiNhan':
-              v = lo.khach_hang_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiNhan',fv:lo.khach_hang_id})}" class="text-gray-600 hover:text-blue-600 no-underline">${esc(lo.khach_hang_ten)}</a>` : '';
+              v = lo.khach_hang_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiNhan',fv:lo.khach_hang_id})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.khach_hang_ten)}</a>` : '';
+              sortVal = lo.khach_hang_ten || '';
               break;
             case 'nguoiTao':
-              v = lo.nguoi_tao_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiTao',fv:lo.nguoi_tao})}" class="text-gray-600 hover:text-blue-600 no-underline">${esc(lo.nguoi_tao_ten)}</a>` : '\u2014';
+              v = lo.nguoi_tao_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiTao',fv:lo.nguoi_tao})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_tao_ten)}</a>` : '\u2014';
+              sortVal = lo.nguoi_tao_ten || '';
               break;
             case 'nguoiThu':
-              v = lo.nguoi_thu_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiThu',fv:lo.nguoi_thu})}" class="text-gray-600 hover:text-blue-600 no-underline">${esc(lo.nguoi_thu_ten)}</a>` : '\u2014';
+              v = lo.nguoi_thu_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiThu',fv:lo.nguoi_thu})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_thu_ten)}</a>` : '\u2014';
+              sortVal = lo.nguoi_thu_ten || '';
               break;
             case 'soKien':
               v = fmtNum(lo.so_kien);
+              sortVal = String(lo.so_kien);
               break;
             case 'daTraHang':
               v = lo.da_tra_hang < lo.so_kien
-                ? `<span style="color:#d97706">${fmtNum(lo.da_tra_hang)}</span>`
+                ? `<span class="text-warning">${fmtNum(lo.da_tra_hang)}</span>`
                 : fmtNum(lo.da_tra_hang);
+              sortVal = String(lo.da_tra_hang);
               break;
             case 'luuKho':
               v = luuKho > 0
                 ? `<span style="color:#7c3aed">${fmtNum(luuKho)}</span>`
-                : `<span class="text-gray-400">0</span>`;
+                : `<span class="text-bodytext dark:text-darklink">0</span>`;
+              sortVal = String(luuKho);
               break;
             case 'ghiChu':
               v = lo.ly_do_thieu ? `<span class="text-xs">${esc(lo.ly_do_thieu)}</span>` : '\u2014';
+              sortVal = lo.ly_do_thieu || '';
               break;
             case 'donGia':
               v = lo.don_gia > 0
-                ? `${fmtNum(lo.don_gia)} <span class="text-xs text-gray-400">${esc(lo.tien_te)}</span>`
-                : '<span class="text-gray-400 italic">tổng</span>';
+                ? `${fmtNum(lo.don_gia)} <span class="text-xs text-bodytext dark:text-darklink">${esc(lo.tien_te)}</span>`
+                : '<span class="text-bodytext dark:text-darklink italic">tổng</span>';
+              sortVal = String(lo.don_gia);
               break;
             case 'thanhTien':
-              v = `${fmtNum(lo.thanh_tien)} <span class="text-xs text-gray-400">${esc(lo.tien_te)}</span>`;
+              v = `${fmtNum(lo.thanh_tien)} <span class="text-xs text-bodytext dark:text-darklink">${esc(lo.tien_te)}</span>`;
+              sortVal = String(lo.thanh_tien);
               break;
             case 'soTienHang':
               v = (lo.so_tien_hang > 0)
-                ? `${fmtNum(lo.so_tien_hang)} <span class="text-xs text-gray-400">${esc(lo.tien_te_th || lo.tien_te)}</span>`
+                ? `${fmtNum(lo.so_tien_hang)} <span class="text-xs text-bodytext dark:text-darklink">${esc(lo.tien_te_th || lo.tien_te)}</span>`
                 : '\u2014';
+              sortVal = String(lo.so_tien_hang || 0);
               break;
           }
-          html += `<td class="px-2 py-2 text-xs border-l border-gray-100 ${tdCls} ${align}">${v}</td>`;
+          html += `<td class="text-xs${tdCls}${align}"${sortVal ? ` data-sort="${esc(sortVal)}"` : ''}>${v}</td>`;
         });
         if (perm.canEdit) {
-          html += `<td class="px-2 py-2 text-xs border-l border-gray-100">
-            <a href="/lo-hang/${esc(lo.id)}" class="text-blue-600 hover:underline" title="Sửa">
-              <iconify-icon icon="solar:pen-linear"></iconify-icon>
+          html += `<td class="text-xs">
+            <a href="/lo-hang/${esc(lo.id)}" class="htql-table-action htql-table-action--edit" title="Sửa">
+              <iconify-icon icon="solar:pen-linear" width="16"></iconify-icon>
             </a>
           </td>`;
         }
@@ -647,13 +666,13 @@ loHangRoutes.get('/', async (c) => {
   });
 
   if (lots.length === 0) {
-    html += `<tr><td colspan="${cols.length + 3}" class="px-4 py-8 text-center text-gray-400 italic">Chưa có phiếu nào</td></tr>`;
+    html += `<tr><td colspan="${totalColspan}" class="htql-dt-empty">Chưa có phiếu nào</td></tr>`;
   }
 
   // Totals row
-  html += `<tr class="border-t border-gray-300 bg-blue-50">`;
-  html += `<td class="px-2 py-2 text-xs text-right" style="width:24px">&#128202;</td>`;
-  html += `<td class="px-2 py-2" style="width:30px"></td>`;
+  html += `<tr class="htql-dt-totals">`;
+  html += `<td style="width:28px"><iconify-icon icon="solar:chart-2-bold-duotone" width="14"></iconify-icon></td>`;
+  html += `<td style="width:32px"></td>`;
   cols.forEach(col => {
     const def = COL_DEFS[col];
     const isNum = def?.cls?.includes('num') ?? false;
@@ -663,28 +682,28 @@ loHangRoutes.get('/', async (c) => {
     else if (col === 'luuKho') v = totalLuuKho > 0 ? `<strong style="color:#7c3aed">${fmtNum(totalLuuKho)}</strong>` : '0';
     else if (col === 'thanhTien') v = `<strong style="color:#16a34a">${fmtCcy('thanhTien')}</strong>`;
     else if (col === 'soTienHang') v = `<strong>${fmtCcy('soTienHang')}</strong>`;
-    else if (col === 'ma') v = `<span style="color:#6b7280;font-weight:normal">Tổng ${lots.length} phiếu:</span>`;
-    html += `<td class="px-2 py-2 text-xs border-l border-gray-100" style="text-align:${isNum?'right':'left'}">${v}</td>`;
+    else if (col === 'ma') v = `<span class="text-bodytext dark:text-darklink font-normal">Tổng ${lots.length} phiếu:</span>`;
+    html += `<td class="text-xs" style="text-align:${isNum?'right':'left'}">${v}</td>`;
   });
-  if (perm.canEdit) html += `<td class="px-2 py-2 border-l border-gray-100"></td>`;
+  if (perm.canEdit) html += `<td></td>`;
   html += `</tr>`;
 
   html += `</tbody></table></div>`;
 
   // Footer
-  html += `<div class="flex flex-wrap justify-between items-center px-4 py-3 border-t border-gray-200 text-xs text-gray-500">
+  html += `<div class="htql-dt-footer">
     <span>${chuyenIds.length} chuyến \u00B7 ${lots.length} phiếu \u00B7 <strong>${rangeLabel(filterRange)}</strong></span>
     <span>Vai trò: <strong>${user.display_name} (${role})</strong></span>
   </div>`;
 
   html += `</div>`;
 
-  // Bulk action bar (client-side toggle)
+  // Bulk action bar
   html += `<div id="bulkBar" class="hidden fixed bottom-0 left-0 right-0 bg-primary text-white px-6 py-3 flex items-center gap-3 z-50 shadow-lg">
     <span id="bulkCount" class="font-semibold">0 phiếu đã chọn:</span>
-    <button onclick="bulkAction('tra-hang')" class="px-3 py-1.5 bg-white text-blue-600 rounded text-sm font-medium hover:bg-blue-50">Đã trả hàng</button>
-    <button onclick="bulkAction('print')" class="px-3 py-1.5 bg-white text-blue-600 rounded text-sm font-medium hover:bg-blue-50">In nhãn</button>
-    <button onclick="clearSelection()" class="px-3 py-1.5 bg-blue-700 text-white rounded text-sm hover:bg-blue-800 ml-auto">Bỏ chọn</button>
+    <button onclick="bulkAction('tra-hang')" class="htql-dt-btn" style="border-color:rgba(255,255,255,0.3);color:#fff">Đã trả hàng</button>
+    <button onclick="bulkAction('print')" class="htql-dt-btn" style="border-color:rgba(255,255,255,0.3);color:#fff">In nhãn</button>
+    <button onclick="clearSelection()" class="htql-dt-btn ml-auto" style="border-color:rgba(255,255,255,0.3);color:#fff">Bỏ chọn</button>
   </div>`;
 
   // Client-side scripts
@@ -839,7 +858,9 @@ loHangRoutes.get('/', async (c) => {
     });
     const data = await res.json();
     if (res.ok) {
-      alert('Đã import ' + (data.imported || 0) + ' bản ghi');
+      var msg = 'Đã import ' + (data.imported || 0) + ' bản ghi';
+      if (data.skipped > 0) msg += '\\n(Bỏ qua ' + data.skipped + ' dòng do thiếu KH/Hãng)';
+      alert(msg);
       location.reload();
     } else {
       alert(data.error || 'Lỗi import');
@@ -1734,31 +1755,40 @@ loHangRoutes.post('/api/import/confirm', async (c) => {
   const now = new Date().toISOString();
   let imported = 0;
 
+  let skipped = 0;
+
   if (body.type === 'kh') {
+    const lastKh = await db.prepare("SELECT COUNT(*) as cnt FROM khach_hang").first<{cnt:number}>();
+    let khSeq = (lastKh?.cnt || 0) + 1;
     for (const row of body.valid as { ten: string; nip?: string; dia_chi?: string; sdt?: string; han_tt?: number; ghi_chu?: string }[]) {
-      const id = `KH-${Date.now()}-${imported}`;
-      const maKh = `KH${String(imported + 1).padStart(4, '0')}`;
+      const id = `KH-${Date.now()}-${khSeq}`;
+      const maKh = `KH${String(khSeq).padStart(4, '0')}`;
       await db.prepare(
         `INSERT OR IGNORE INTO khach_hang (id, ma_kh, ten, nip, dia_chi, sdt, han_tt, ghi_chu, danh_gia, danh_gia_manual, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?)`
       ).bind(id, maKh, row.ten, row.nip || '', row.dia_chi || '', row.sdt || '', row.han_tt || 30, row.ghi_chu || '', now, now).run();
       imported++;
+      khSeq++;
     }
   } else if (body.type === 'hang') {
+    let hangSeq = Date.now();
     for (const row of body.valid as { ten: string; nuoc?: string; dia_chi?: string }[]) {
-      const id = `H-${Date.now()}-${imported}`;
+      const id = `H-${hangSeq}`;
       await db.prepare(
         `INSERT OR IGNORE INTO hang (id, ten, nuoc, dia_chi, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
       ).bind(id, row.ten, row.nuoc || '', row.dia_chi || '', now, now).run();
       imported++;
+      hangSeq++;
     }
   } else if (body.type === 'cty') {
+    let ctySeq = Date.now();
     for (const row of body.valid as { ten: string; dia_chi?: string; sdt?: string }[]) {
-      const id = `CTY-${Date.now()}-${imported}`;
+      const id = `CTY-${ctySeq}`;
       await db.prepare(
         `INSERT OR IGNORE INTO cty_van_tai (id, ten, dia_chi, sdt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
       ).bind(id, row.ten, row.dia_chi || '', row.sdt || '', now, now).run();
       imported++;
+      ctySeq++;
     }
   } else if (body.type === 'phieu') {
     const khNameToId = new Map<string, string>();
@@ -1770,16 +1800,22 @@ loHangRoutes.post('/api/import/confirm', async (c) => {
       khNameToId.set(k.ten.trim().toLowerCase().replace(/\s+/g, ' '), k.id);
     }
 
+    let entitySeq = Date.now();
     for (const kh of body.newKHs || []) {
       if (kh.checked === false) continue;
-      const id = `KH-${Date.now()}-${imported}`;
-      const maKh = `IMP${String(imported + 1).padStart(4, '0')}`;
+      const id = `KH-${entitySeq}`;
+      entitySeq++;
+      const lastMaKh = await db.prepare("SELECT ma_kh FROM khach_hang WHERE ma_kh LIKE 'IMP%' ORDER BY ma_kh DESC LIMIT 1").first<{ma_kh:string}>();
+      let impSeq = 1;
+      if (lastMaKh?.ma_kh) {
+        impSeq = (parseInt(lastMaKh.ma_kh.replace('IMP', ''), 10) || 0) + 1;
+      }
+      const maKh = `IMP${String(impSeq).padStart(4, '0')}`;
       await db.prepare(
         `INSERT OR IGNORE INTO khach_hang (id, ma_kh, ten, nip, dia_chi, sdt, han_tt, ghi_chu, danh_gia, danh_gia_manual, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, '', '', '', ?, ?)`
       ).bind(id, maKh, kh.ten, kh.nip || '', kh.dia_chi || '', kh.sdt || '', kh.han_tt || 30, now, now).run();
       khNameToId.set(kh.ten.trim().toLowerCase().replace(/\s+/g, ' '), id);
-      imported++;
     }
 
     const allHang = await db.prepare('SELECT id, ten FROM hang').all<{ id: string; ten: string }>();
@@ -1788,17 +1824,17 @@ loHangRoutes.post('/api/import/confirm', async (c) => {
     }
     for (const h of body.newHangs || []) {
       if (h.checked === false) continue;
-      const id = `H-${Date.now()}-${imported}`;
+      const id = `H-${entitySeq}`;
+      entitySeq++;
       await db.prepare(
         `INSERT OR IGNORE INTO hang (id, ten, nuoc, dia_chi, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
       ).bind(id, h.ten, h.nuoc || '', h.dia_chi || '', now, now).run();
       hangNameToId.set(h.ten.trim().toLowerCase().replace(/\s+/g, ' '), id);
-      imported++;
     }
 
     for (const x of body.newXes || []) {
       if (x.checked === false) continue;
-      const id = x.so_xe.replace(/\s+/g, '-').slice(0, 20) || `XE-${imported}`;
+      const id = x.so_xe.replace(/\s+/g, '-').slice(0, 20) || `XE-${entitySeq++}`;
       await db.prepare(
         `INSERT OR IGNORE INTO xe (id, bien_so, so_xe, loai_xe, trong_tai, tai_xe_id, created_at, updated_at)
          VALUES (?, ?, ?, '', 0, '', ?, ?)`
@@ -1821,7 +1857,10 @@ loHangRoutes.post('/api/import/confirm', async (c) => {
       let hangId = p.hang_id;
       if (p._khTen) khId = khNameToId.get(p._khTen.trim().toLowerCase().replace(/\s+/g, ' ')) || khId;
       if (p._hangTen) hangId = hangNameToId.get(p._hangTen.trim().toLowerCase().replace(/\s+/g, ' ')) || hangId;
-      if (!khId || !hangId) continue;
+      if (!khId || !hangId) {
+        skipped++;
+        continue;
+      }
 
       let loId: string;
       if (p.chuyen_xe_id) {
@@ -1839,7 +1878,15 @@ loHangRoutes.post('/api/import/confirm', async (c) => {
         const ds = String(today.getFullYear()).slice(-2) +
           String(today.getMonth() + 1).padStart(2, '0') +
           String(today.getDate()).padStart(2, '0');
-        loId = `DK${ds}-${String(imported + 1).padStart(3, '0')}`;
+        const lastDk = await db.prepare(
+          `SELECT id FROM lo_hang WHERE id LIKE ? ORDER BY id DESC LIMIT 1`
+        ).bind(`DK${ds}-%`).first<{ id: string }>();
+        let dkSeq = 1;
+        if (lastDk?.id) {
+          const parts = lastDk.id.split('-');
+          dkSeq = (parseInt(parts[parts.length - 1], 10) || 0) + 1;
+        }
+        loId = `DK${ds}-${String(dkSeq).padStart(3, '0')}`;
       }
 
       await db.prepare(
@@ -1882,7 +1929,7 @@ loHangRoutes.post('/api/import/confirm', async (c) => {
     `${imported} bản ghi`,
   ).run();
 
-  return c.json({ success: true, imported });
+  return c.json({ success: true, imported, skipped });
 });
 
 // ─── Helper: build grid URL preserving params ─────────────────
