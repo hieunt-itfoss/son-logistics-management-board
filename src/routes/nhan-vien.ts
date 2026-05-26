@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, NhanVien, VaiTro, AppVariables } from '../types';
 import { layout } from '../utils/layout';
-import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, tableActions, btnPrimary } from '../utils/ui';
+import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, tableActions, btnPrimary, searchField } from '../utils/ui';
 
 export const nhanVienRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -112,11 +112,10 @@ nhanVienRoutes.get('/', async (c) => {
 
     <!-- Search -->
     <form method="GET" action="/nhan-vien" class="mb-4">
-      <div class="flex gap-2">
+      <div class="flex items-center gap-2">
         ${filterRole ? `<input type="hidden" name="vai_tro" value="${filterRole}">` : ''}
-        <input type="text" name="q" value="${escapeHtml(search)}" placeholder="Tìm theo tên, mã, SĐT..." class="flex-1 max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-        <button type="submit" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 text-sm font-medium cursor-pointer">Tìm</button>
-        ${search ? `<a href="/nhan-vien${filterRole ? '?vai_tro=' + filterRole : ''}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 text-sm font-medium">✕</a>` : ''}
+        ${searchField({ value: escapeHtml(search), placeholder: 'Tìm theo tên, mã, SĐT...' })}
+        ${search ? `<a href="/nhan-vien${filterRole ? '?vai_tro=' + filterRole : ''}" class="htql-dt-btn">✕</a>` : ''}
       </div>
     </form>
 

@@ -118,233 +118,119 @@ Default login: `admin` / `admin123`
 
 ## Design System
 
-> **Stack:** TailwindAdmin layout + Tatem-inspired tokens. SSR HTML only (no React).
+> **Stack:** TailwindAdmin layout + Tatem tokens. SSR HTML only (no React).
+> **Visual:** Midnight-terminal clarity — cool, precise, dark-mode-first with Cerulean Accent (`#007eed`).
 > **Source:** `DESIGN.md` — read for full detail when building UI.
-
-**Template:** [TailwindAdmin React](https://react.tailwind-admin.com/) — vertical sidebar, fixed topbar, `card` / `btn` / `form-control` utilities from `public/assets/tailwind/tailwind.css`.
-
-**Visual direction:** [Tatem on Refero](https://styles.refero.design/style/cb6e4ab0-b8fe-45b0-bd22-6339b073e26d) — midnight-terminal clarity, restrained blue accent, Inter typography, comfortable spacing.
-
-**Theme default:** light + `Blue_Theme`. Dark mode via `data-theme="dark"` on `<html>` (toggle in header).
+> **Similar brands:** Linear, Raycast, Notion (dark), Supabase (dark), Vercel (dark).
 
 ### Design File Map
 
 | Purpose | Path |
 |---------|------|
 | App shell (sidebar, header) | `src/utils/layout.ts` |
-| Reusable HTML fragments | `src/utils/ui.ts` |
-| TailwindAdmin source | `public/assets/tailwind/tailwind.input.css` |
-| Compiled CSS (browser) | `public/assets/tailwind/tailwind.css` — run `npm run build:css` after editing source |
+| Reusable HTML fragments + modals | `src/utils/ui.ts` |
+| Shared modal CSS (`.htql-modal-*`) | `public/assets/css/theme.css` |
+| Shared modal JS (open/close/drag) | `public/assets/js/htql-modal.js` |
+| TailwindAdmin compiled CSS | `public/assets/tailwind/tailwind.css` — run `npm run build:css` after editing |
 | HTQLVT overrides (font, tokens) | `public/assets/css/theme.css` |
-| Sidebar/theme JS | `public/assets/js/app.init.js`, `app.min.js`, `theme.js` |
 | Icons | Iconify Solar (`iconify-icon`) |
 
-### Layout Shell (TailwindAdmin)
+### Tatem Color Palette
 
-Every authenticated page uses `layout(title, content, user, activePageId)` from `src/utils/layout.ts`.
+| Name | Value | Role |
+|------|-------|------|
+| Twilight Ink | `#000000` | Page backgrounds (dark), primary dark neutral |
+| Polar White | `#ffffff` | Primary text on dark, high-contrast elements |
+| Pewter Mist | `#919191` | Secondary text, subtle borders, inactive states, icon strokes |
+| Silver Tone | `#b5b5b5` | Muted headings and body text, softer contrast than white |
+| Obsidian Grey | `#606060` | Tertiary text, subtle backgrounds, borders |
+| Charcoal Black | `#3b3b3b` | Card/element backgrounds (dark), dividers |
+| Mist Grey | `#c2c2c2` | Hover states on neutral elements |
+| Cerulean Accent | `#007eed` | Interactive elements, links, active states — **only saturated color** |
 
-```html
-<html lang="vi" dir="ltr"
-  data-color-theme="Blue_Theme"
-  data-layout="vertical"
-  data-sidebartype="full"
-  data-card="border"
-  data-header-position="fixed">
-<body>
-  <aside class="left-sidebar ...">  <!-- 270px, role-filtered nav -->
-  <div class="page-wrapper">
-    <header class="topbar app-header">  <!-- page title, user, theme toggle -->
-    <div class="body-wrapper">
-      <div class="container py-6">  <!-- page content -->
-```
+### TailwindAdmin Token Mapping
 
-**Do not** duplicate `layout()` per route. **Do not** load `cdn.tailwindcss.com` — use compiled `/assets/tailwind/tailwind.css` only.
+| Token | Role | Dark variant |
+|-------|------|-------------|
+| `--primary` | Buttons, active sidebar, links | same |
+| `--dark` | Headings | `--white` |
+| `--bodytext` / `--link` | Body copy, nav text | `--darklink` |
+| `--border` / `--bordergray` | Borders, inputs | `--darkborder` |
+| `--lightgray` | Page bg, hover | `--darkgray` |
+| `--light-dark` | Dividers | `--darkborder` |
 
-After changing `tailwind.input.css` or utilities under `public/assets/tailwind/`:
+### Typography
 
-```bash
-npm run build:css
-```
-
-### Tokens — Colors
-
-#### TailwindAdmin (primary UI)
-
-| Token | Role |
-|-------|------|
-| `--primary` | Buttons, active sidebar, links |
-| `--secondary` | Secondary actions |
-| `--info` / `--success` / `--warning` / `--error` | Status, alerts |
-| `--border` / `--bordergray` | Card borders, inputs |
-| `--bodytext` / `--link` | Body copy, nav text |
-| `--dark` | Headings (light mode) |
-
-Set via `data-color-theme="Blue_Theme"` on `<html>`.
-
-#### HTQLVT semantic (Tatem-inspired, in `theme.css`)
-
-| Name | Value | CSS variable | Role |
-|------|-------|--------------|------|
-| Cerulean Accent | `#007eed` | `--htql-accent` | KPI highlights, chart series |
-| Twilight Ink | `#0f1419` | `--htql-ink` | Dark mode page bg |
-| Polar White | `#ffffff` | `--htql-surface` | Cards (light) |
-| Pewter Mist | `#919191` | `--htql-muted` | Secondary labels |
-| Charcoal Panel | `#3b3b3b` | `--htql-panel` | Dark mode cards |
-
-### Tokens — Typography
-
-- **Font:** Inter (`--theme-font` in `theme.css`), fallback `system-ui, sans-serif`
-- **Scale:** TailwindAdmin utilities — `card-title` (18px semibold), body `text-sm` (14px)
-- **Headings in pages:** use `pageHeader()` from `ui.ts`
-- **Vietnamese:** `lang="vi"` on `<html>`, `toLocaleString('vi-VN')` for numbers
+- **Font:** Inter 400 (`--theme-font`), fallback `system-ui, sans-serif`
+- **Letter spacing:** tight (`-0.1px`) for compact functional feel
+- **Scale:** caption 13px, body 16px, subheading 20px, display 40px
 
 | Role | Classes |
 |------|---------|
 | Page title | `text-xl font-semibold text-dark dark:text-white` |
 | Card title | `card-title` |
-| Card subtitle | `card-subtitle` |
-| Table header | `caption` or `text-xs uppercase text-link` |
+| Table header | `text-xs uppercase text-link` |
 | Muted hint | `text-xs text-bodytext dark:text-darklink` |
+| Modal title | `.htql-modal-title` |
 
-### Tokens — Spacing & Shape
+### Spacing & Shape
 
 | Element | Value |
 |---------|-------|
-| Sidebar width | 270px |
+| Base unit | 4px, section gap 28px, element gap 8px |
+| Sidebar | 270px |
 | Card padding | `card-body` → 30px |
 | Section gap | `mb-6` between blocks |
-| Input/button radius | `rounded-md` (7px theme) |
-| Container | `container` → max 1536px, px-5 |
+| Radius | default 6px, buttons 7px, modals 16px |
+| Container | max 1536px, px-5 |
 
 ### UI Components (`src/utils/ui.ts`)
 
-#### Page header
 ```ts
-pageHeader('Tuyến vận tải', {
-  subtitle: 'Quản lý tuyến theo nhóm đầu mục VT',
-  actions: btnPrimary('Tuyến mới', { icon: 'solar:add-circle-linear', onclick: 'showAddForm()' }),
-});
+pageHeader('Title', { subtitle: '...', actions: btnPrimary('New', { icon: '...', onclick: '...' }) });
+card({ title: 'List', body: tableHtml });
+dataTable(headers, rows, { align: 'center' });
+formGroup('Label', input({ name: '...', required: true }));
 ```
-
-#### Card
-```ts
-card({ title: 'Danh sách', body: tableHtml });
-card({ body: formHtml }); // no title
-```
-Classes: `card` + optional `card-body`, `card-title`, `card-subtitle`.
-
-#### Stat card (dashboard)
-```ts
-statCard('Khách hàng', '-', { id: 'stat-customers', href: '/doi-tac', hint: 'Xem danh sách →' });
-```
-
-#### Table
-```ts
-dataTable(['Mã', 'Tên', ...], rowsHtml);
-dataTable(headers, rows, { align: 'center' }); // optional column alignment
-tableRow(cells, { align: 'center' });
-tableActions(editOnclick, deleteOnclick, permOnclick, { center: true });
-tableEmpty(colspan, message);
-th('Label', { align: 'right' });
-```
-Wraps table in `card` with `overflow-x-auto`. Table class: `htql-table`. Action buttons: `htql-table-action`.
-
-#### Forms
-```ts
-formGroup('Tên tuyến', input({ name: 'ten', required: true }));
-select({ name: 'dau_muc_group', options: [...] });
-```
-Inputs use `form-control` class (TailwindAdmin).
-
-#### Buttons
 
 | Helper | Class |
 |--------|-------|
-| `btnPrimary('Lưu')` | `btn` |
-| `btnSecondary('Hủy')` | `btn-outline border-bordergray` |
+| `btnPrimary('Lưu')` | `btn` (Cerulean bg, white text) |
+| `btnSecondary('Hủy')` | `btn-outline border-bordergray text-link dark:text-darklink` |
 | `btnDanger('Xóa')` | `btn-error` |
-| `btnLightPrimary(...)` | `btn-light-primary` |
+| `btnModalChip(...)` | `.htql-modal-chip` (outlined chip inside modals) |
+| `btnModalOutline(...)` | `.htql-modal-btn-outline` (bordered modal button) |
 
-#### Alerts & badges
+### Modals (shared system)
+
+All modals use `modalShell()` from `ui.ts` + CSS in `theme.css` + JS in `htql-modal.js`:
+
 ```ts
-alert('error', 'Tên đăng nhập hoặc mật khẩu không đúng.');
-badge('Đang chạy', 'success'); // primary | success | warning | error | neutral
+modalShell({
+  id: 'myModal', title: 'Title', size: 'lg', // sm|md|lg|xl|2xl
+  body: `<form ...>...</form>`,
+  footer: modalFooterInner(btnSecondary('Huỷ', { onclick: 'htqlCloseModal("myModal")' }), btnPrimary('Lưu')),
+});
 ```
 
-### Page Patterns
+Open: `htqlOpenModal('id')`. Close: `htqlCloseModal('id')`.
+Built-in: backdrop click dismiss, Escape key, header drag-to-move, body scroll lock, z-index 70.
 
-#### List + inline form (CRUD)
-1. `pageHeader` with primary action
-2. Hidden `#addForm` → `card({ title: 'Thêm mới', body: form })`
-3. `dataTable(...)` for list
-4. Vanilla `fetch` to `/api/...`, `location.reload()` on success
-
-#### Dashboard
-1. Row of `statCard` (grid `grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6`)
-2. Chart cards: `card({ title, body: '<div id="chart-..."></div>' })`
-3. ApexCharts CDN in content only on dashboard
-
-#### Login (no layout)
-Split panel: brand left (`lg:w-[55%]`, primary gradient), form right. Use `form-control`, `btn`, `card` classes. File: `src/routes/auth.ts`.
-
-#### Toolbar with search (doi-tac pattern)
-Single row: primary button left, filters/search right (`flex-nowrap`, `justify-end`). Search input: `type="text"` (not `search` — avoids browser clear button), icon submit button inside relative wrapper.
-
-### Icons
-
-Use Iconify Solar line icons:
-```html
-<iconify-icon icon="solar:bus-2-linear" class="text-xl"></iconify-icon>
-```
-Load: `https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js`
+Footer patterns:
+- `modalFooterInner(...)` — right-aligned buttons
+- `modalFooterSplit(leftHtml, rightHtml)` — delete left + save/cancel right
 
 ### Dark Mode
 
-- Toggle sets `document.documentElement.setAttribute('data-theme', 'dark'|'light')`
-- TailwindAdmin: `dark:` variants + `dark.css`
-- Persist in `localStorage` key `htqlvt-theme`
-- Login page: light only
+- Toggle adds/removes `.dark` on `<html>`, persists in `localStorage` key `htqlvt-theme`
+- **All new UI must include `dark:` variants** — never use bare `text-gray-*`, `bg-white`, `border-gray-*`
+- Modals are fully dark-safe via `.htql-modal-*` classes (theme tokens, not hardcoded colors)
 
-### Design Do's and Don'ts
+### Do / Don't
 
-#### Do
-- Import `layout` from `../utils/layout` and UI helpers from `../utils/ui`
-- Escape user strings with `esc()` before embedding in HTML
-- Use `card`, `btn`, `form-control` utilities from tailwind.css
-- Keep sidebar nav in `ALL_NAV_ITEMS` with `roles` array
-- Use `activePage` id matching nav `id` field
+**Do:** Use `layout` + `ui.ts` helpers. Use theme tokens with `dark:` variants. Use `modalShell()` for modals. Use Inter 400 for body. Use Cerulean Accent only for interactive highlights.
 
-#### Don't
-- Don't add React/JSX or `cdn.tailwindcss.com`
-- Don't create per-route `layout()` copies
-- Don't use heavy box-shadows; prefer `data-card="border"` (bordered cards)
-- Don't introduce colors outside primary palette + semantic status colors
-- Don't use `tai_xe` table name in UI labels (use Nhân viên / Lái xe)
-
-### Agent Prompt — New List Page
-
-```
-Create src/routes/foo.ts following tuyen.ts:
-- import { layout } from '../utils/layout'
-- import { pageHeader, card, dataTable, btnPrimary, formGroup, input } from '../utils/ui'
-- return c.html(layout('Tiêu đề', content, user, 'foo'))
-- Mount in index.ts as protectedApp.route('/foo', fooRoutes)
-- Add nav item to ALL_NAV_ITEMS in layout.ts with roles
-```
-
-### Quick Color Reference
-
-- Text primary: `text-dark dark:text-white`
-- Text muted: `text-bodytext` / `text-link`
-- Background page: `bg-lightgray` (body default via theme)
-- CTA: `btn` (primary)
-- Accent KPI: `#007eed` / `text-primary`
-
-### Visual References
-
-- **TailwindAdmin** — sidebar + card dashboard structure
-- **Tatem** — dark terminal restraint, single blue accent
-- **Linear / Supabase dark** — data-dense tables, minimal chrome
+**Don't:** Add React/JSX or `cdn.tailwindcss.com`. Duplicate `layout()`. Use heavy shadows. Introduce colors beyond palette + status. Use bare `text-gray-*` without dark variant. Use `z-50` for modals (sidebar is z-60). Use `items-end` bottom-sheet positioning for modals.
 
 ---
 
