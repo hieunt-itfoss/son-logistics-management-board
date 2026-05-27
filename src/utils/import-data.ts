@@ -4,6 +4,17 @@
 
 export type ImportType = 'kh' | 'hang' | 'cty' | 'phieu';
 
+/**
+ * Receipt import without a vehicle is grouped by route + date, split into 2 groups by parcel count:
+ *   - WITH parcels  -> "Awaiting vehicle assignment"  trip code F260526-CX, receipt F260526-CX-003 (vehicle assigned later)
+ *   - NO parcels    -> "Receivable outside trip"      trip code F260526-NT, receipt F260526-NT-003 (no vehicle assignment)
+ * ID pattern keeps the old {tienTo}{ddmmyy}-{xe}-{seq} shape; the vehicle segment becomes CX / NT.
+ */
+const MARK_CHO_XE = 'CX'; // has parcels, awaiting vehicle assignment
+const MARK_PHAI_THU = 'NT'; // no parcels, pure receivable (off-route)
+/** Virtual vehicle ID placeholder for the two groups above (satisfies chuyen_xe.xe_id FK) */
+export const VIRTUAL_XE_ID = 'XE-CHO-XEP';
+
 export interface ParsedTable {
   headers: string[];
   rows: Record<string, string>[];
@@ -184,6 +195,7 @@ export interface PhieuDraft {
   nguoi_thu: string;
   _khTen?: string;
   _hangTen?: string;
+  _loId?: string;
   warns: string[];
 }
 
@@ -197,6 +209,7 @@ export interface NewChuyenDraft {
   ngay_den: string;
   gia_chuyen: number;
   tien_te: string;
+  ao?: boolean;
 }
 
 export interface ImportPreviewResult {
@@ -223,6 +236,7 @@ interface TuyenRow {
   id: string;
   ten: string;
   tien_to: string;
+  dau_muc_group?: string;
 }
 interface XeRow {
   id: string;
@@ -248,6 +262,7 @@ export function buildImportPreview(
     xe: XeRow[];
     chuyenXe: ChuyenRow[];
     loHangCountByKh: Map<string, number>;
+    importDate?: string;
   },
 ): ImportPreviewResult {
   const valid: unknown[] = [];
@@ -314,29 +329,33 @@ export function buildImportPreview(
     return { valid, errors, warns };
   }
 
-  // phieu
+  // receipts
   const newChs = new Map<string, NewChuyenDraft>();
   const newKHs = new Map<string, NewKhDraft>();
   const newHangs = new Map<string, NewHangDraft>();
   const newXes = new Map<string, NewXeDraft>();
   const missingTuyens = new Set<string>();
+  // Count lots generated per (virtual trip + customer code) to avoid duplicate receipt IDs (-2, -3...)
+  const aoLoSeq = new Map<string, number>();
+  // Lookup customer code by customer id (for virtual receipt ID suffix)
+  const khMaById = new Map<string, string>();
+  for (const k of ctx.khachHang) khMaById.set(k.id, k.ma_kh);
 
   rows.forEach((r, i) => {
     const tenKH = gv(r, 'tenkh', 'khach', 'customer');
     const tenHang = gv(r, 'tenhang', 'hang', 'sender');
     const soKien = parseInt(gv(r, 'sokien', 'kien', 'qty', 'pcs'), 10) || 0;
+    const _tenTuyen = gv(r, 'tentuyen', 'tuyen', 'route');
     if (!tenKH) {
       errors.push({ row: i + 2, msg: 'Thiếu tên KH (bắt buộc)' });
       return;
     }
-    if (!tenHang) {
-      errors.push({ row: i + 2, msg: 'Thiếu tên Hãng (bắt buộc)' });
+    if (!_tenTuyen) {
+      errors.push({ row: i + 2, msg: 'Thiếu tuyến vận tải (bắt buộc)' });
       return;
     }
-    if (soKien <= 0) {
-      errors.push({ row: i + 2, msg: 'Thiếu số kiện hoặc = 0' });
-      return;
-    }
+    // Supplier, parcel count, vehicle, date, unit price: NOT required.
+    // Transport receipt (VT): transport total only. Merchandise receipt (TH): merchandise amount only.
 
     const rowWarns: string[] = [];
 
@@ -363,8 +382,8 @@ export function buildImportPreview(
       rowWarns.push(`KH "${tenKH}" → "${(khMatch.item as KhRow).ten}"`);
     }
 
-    let hangMatch = matchByName(tenHang, ctx.hang, ['ten']);
-    if (!hangMatch) {
+    let hangMatch = tenHang ? matchByName(tenHang, ctx.hang, ['ten']) : null;
+    if (tenHang && !hangMatch) {
       const key = normName(tenHang);
       const existing = newHangs.get(key);
       if (existing) {
@@ -419,16 +438,26 @@ export function buildImportPreview(
       }
     }
 
+    // Compute amounts first to classify VT (transport total) vs TH (merchandise) receipts
+    const tienTe = gv(r, 'tiente', 'currency') || 'PLN';
+    const donGia = parseFloat(gv(r, 'dongia', 'price')) || 0;
+    const thanhTien =
+      parseFloat(gv(r, 'thanhtien', 'total')) || (donGia > 0 ? donGia * soKien : 0);
+    const soTienHang = parseFloat(gv(r, 'sotienhang', 'tienhang')) || 0;
+
+    let loIdAo = '';
+
     if (xe && tuyen && ngayDi) {
+      // Real trip: vehicle + route + date
       const xeId = 'id' in xe ? (xe as XeRow).id : '';
       chuyen =
         ctx.chuyenXe.find(
           (c) => c.xe_id === xeId && c.tuyen_id === tuyen.id && c.ngay_di === ngayDi,
         ) || null;
       if (!chuyen) {
-        const xeNum = xeId.replace(/[^0-9]/g, '') || '0';
-        const dd = ngayDi.split('-').reverse().join('').slice(0, 6);
-        const newId = `${tuyen.tien_to}-${dd}-${xeNum}`;
+        const xeNum = (xeId.replace(/\D/g, '') || '0').padStart(2, '0');
+        const dd = ngayDi.slice(2).replace(/-/g, ''); // YYYY-MM-DD -> YYMMDD
+        const newId = `${tuyen.tien_to}${dd}-${xeNum}`;
         const draft: NewChuyenDraft = {
           id: newId,
           tuyen_id: tuyen.id,
@@ -438,38 +467,70 @@ export function buildImportPreview(
           ngay_di: ngayDi,
           ngay_den: ngayVe || ngayDi,
           gia_chuyen: 0,
-          tien_te: gv(r, 'tiente', 'currency') || 'PLN',
+          tien_te: tienTe,
         };
         newChs.set(newId, draft);
         chuyen = draft;
         rowWarns.push(`Chuyến mới: ${newId}`);
       }
+    } else if (tuyen) {
+      // No vehicle yet: group by route + date, split by parcel count.
+      //   with parcels  -> CX (awaiting vehicle, assign later)
+      //   no parcels    -> NT (pure receivable, no vehicle)
+      const mark = soKien > 0 ? MARK_CHO_XE : MARK_PHAI_THU;
+      const ngayMa = ngayDi || ctx.importDate || new Date().toISOString().slice(0, 10);
+      // ngayMa is YYYY-MM-DD -> yymmdd (e.g. 2026-05-26 -> 260526)
+      const dd = ngayMa.slice(2).replace(/-/g, '');
+      const maChuyen = `${tuyen.tien_to}${dd}-${mark}`; // e.g. F260526-CX or F260526-NT
+      let chCho = newChs.get(maChuyen);
+      if (!chCho) {
+        chCho = {
+          id: maChuyen,
+          tuyen_id: tuyen.id,
+          xe_id: VIRTUAL_XE_ID,
+          so_xe: '',
+          tai_xe_id: '',
+          ngay_di: ngayMa,
+          ngay_den: ngayMa,
+          gia_chuyen: 0,
+          tien_te: tienTe,
+          ao: true,
+        };
+        newChs.set(maChuyen, chCho);
+        rowWarns.push(soKien > 0 ? `Chờ xếp xe: ${maChuyen}` : `Phải thu ngoài chuyến: ${maChuyen}`);
+      }
+      chuyen = chCho;
+      // Receipt ID = "{trip code}-{customer code}" + dedupe suffix (-2, -3...)
+      const khId0 = 'id' in khMatch!.item ? String((khMatch!.item as KhRow).id) : '';
+      const maKH = (khId0 && khMaById.get(khId0)) ||
+        normName(tenKH).replace(/\s+/g, '').slice(0, 6).toUpperCase() || 'KH';
+      const baseLoId = `${maChuyen}-${maKH}`;
+      const n = (aoLoSeq.get(baseLoId) || 0) + 1;
+      aoLoSeq.set(baseLoId, n);
+      loIdAo = n === 1 ? baseLoId : `${baseLoId}-${n}`;
     }
 
-    const tienTe = gv(r, 'tiente', 'currency') || 'PLN';
-    const donGia = parseFloat(gv(r, 'dongia', 'price')) || 0;
-    const thanhTien =
-      parseFloat(gv(r, 'thanhtien', 'total')) || (donGia > 0 ? donGia * soKien : 0);
     const daTra = parseInt(gv(r, 'datrahang', 'datra'), 10);
     const khItem = khMatch!.item;
-    const hangItem = hangMatch!.item;
+    const hangItem = hangMatch ? hangMatch.item : null;
     const obj: PhieuDraft = {
-      khach_hang_id: ('id' in khItem ? String((khItem as KhRow).id) : '') || '',
-      hang_id: ('id' in hangItem ? String((hangItem as HangRow).id) : '') || '',
+      khach_hang_id: (khItem && 'id' in khItem ? String((khItem as KhRow).id) : '') || '',
+      hang_id: (hangItem && 'id' in hangItem ? String((hangItem as HangRow).id) : '') || '',
       chuyen_xe_id: chuyen?.id || '',
       so_kien: soKien,
       da_tra_hang: Number.isFinite(daTra) ? daTra : soKien,
       don_gia: donGia,
       tien_te: tienTe,
       thanh_tien: thanhTien,
-      so_tien_hang: parseFloat(gv(r, 'sotienhang', 'tienhang')) || 0,
+      so_tien_hang: soTienHang,
       tien_te_th: gv(r, 'tienteth', 'thcurrency') || tienTe,
       giam_gia: parseFloat(gv(r, 'giamgia', 'discount')) || 0,
       ly_do_thieu: gv(r, 'lydothieu', 'note', 'lydo', 'ghichu'),
       nguoi_tao: '',
       nguoi_thu: '',
-      _khTen: !('id' in khItem && (khItem as KhRow).id) ? tenKH : undefined,
-      _hangTen: !('id' in hangItem && (hangItem as HangRow).id) ? tenHang : undefined,
+      _khTen: !(khItem && 'id' in khItem && (khItem as KhRow).id) ? tenKH : undefined,
+      _hangTen: hangItem && !('id' in hangItem && (hangItem as HangRow).id) ? tenHang : undefined,
+      _loId: loIdAo || undefined,
       warns: rowWarns,
     };
     valid.push(obj);
@@ -510,6 +571,9 @@ export function csvTemplate(type: ImportType): { filename: string; content: stri
   return {
     filename: 'mau_phieu.csv',
     content:
-      '\uFEFFtenKH,tenHang,soKien,soXe,tenTuyen,ngayDi,donGia,tienTe,thanhTien,soTienHang,ghiChu\nA HUI,JM,100,XE 50,Paris-Wólka,2026-06-01,85,EUR,8500,3000,\n',
+      '\uFEFFtenKH,tenHang,soKien,soXe,tenTuyen,ngayDi,donGia,tienTe,thanhTien,soTienHang,ghiChu\n' +
+      'A HUI,JM,100,XE 50,Paris-Wólka,2026-06-01,85,EUR,8500,3000,phiếu đầy đủ\n' +
+      'A22,,8,,Prato-Wólka,,,PLN,760,,phiếu vận tải (chỉ có thành tiền)\n' +
+      'ADAM,Italmod,,,Prato-Wólka,,,PLN,,5000,phiếu tiền hàng (chỉ có tiền hàng)\n',
   };
 }

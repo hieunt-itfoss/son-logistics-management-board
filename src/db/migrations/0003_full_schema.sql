@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 -- 2. New tables (create BEFORE adding FK references)
 -- ============================================================
 
--- Nhân viên (unified staff table — replaces tai_xe)
+-- Staff (unified staff table — replaces tai_xe)
 CREATE TABLE IF NOT EXISTS nhan_vien (
   id TEXT PRIMARY KEY,
   ten TEXT NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS nhan_vien (
 );
 CREATE INDEX IF NOT EXISTS idx_nhan_vien_vai_tro ON nhan_vien(vai_tro);
 
--- Công ty vận tải (carriers)
+-- Carrier companies
 CREATE TABLE IF NOT EXISTS cty_van_tai (
   id TEXT PRIMARY KEY,
   ten TEXT NOT NULL,
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS cty_van_tai (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Bảng giá (pricing per customer)
+-- Pricing (per customer)
 CREATE TABLE IF NOT EXISTS bang_gia (
   id TEXT PRIMARY KEY,
   khach_hang_id TEXT NOT NULL REFERENCES khach_hang(id),
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS bang_gia (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_bang_gia_khach_hang ON bang_gia(khach_hang_id);
 
--- Chấm công (attendance)
+-- Attendance
 CREATE TABLE IF NOT EXISTS cham_cong (
   id TEXT PRIMARY KEY,
   nhan_vien_id TEXT NOT NULL REFERENCES nhan_vien(id),
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_log_target ON audit_log(target);
 CREATE INDEX IF NOT EXISTS idx_audit_log_ngay ON audit_log(ngay);
 
--- Số dư đầu kỳ (opening balances per currency)
+-- Opening balances (per currency)
 CREATE TABLE IF NOT EXISTS so_du_dau_ky (
   id TEXT PRIMARY KEY,
   tien_te TEXT NOT NULL UNIQUE,

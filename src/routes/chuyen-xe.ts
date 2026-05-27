@@ -468,7 +468,7 @@ chuyenXeRoutes.get('/create', async (c) => {
     }
     selXe?.addEventListener('change', syncTaiXe);
 
-    // Auto-generate ma chuyen preview
+    // Auto-generate trip code preview
     function updatePreview() {
       if (isEdit || !maPreview) return;
       const customVal = customId?.value?.trim();
@@ -773,4 +773,89 @@ chuyenXeRoutes.post('/api/chuyen-xe/:id/toggle-thanh-toan', async (c) => {
   ).bind(newVal, ngayTT, id).run();
 
   return c.json({ success: true, da_thanh_toan: newVal });
+});
+
+// ===================== POST /api/chuyen-xe/bulk =====================
+// Bulk trips: pay carrier (create expense slip), advance (expense slip kieu ung),
+// mark returned (set return date + complete), delete.
+chuyenXeRoutes.post('/api/chuyen-xe/bulk', async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json<{
+    action: string;
+    ids: string[];
+    ngay?: string;
+    soTien?: number;
+    hinhThuc?: 'TM' | 'CK';
+  }>();
+  const ids = body.ids || [];
+  if (ids.length === 0) return c.json({ error: 'Chưa chọn chuyến' }, 400);
+
+  const audit = async (hanhDong: string, chiTiet: string) => {
+    await db.prepare(
+      `INSERT INTO audit_log (id, ngay, gio, nguoi, nguoi_label, hanh_dong, target, chi_tiet)
+       VALUES (?, date('now'), strftime('%H:%M','now'), ?, ?, ?, 'bulk', ?)`
+    ).bind(`AL-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, user.role, user.display_name, hanhDong, chiTiet).run();
+  };
+
+  if (body.action === 'da-ve') {
+    const ngayVe = body.ngay || todayStr();
+    for (const id of ids) {
+      await db.prepare(
+        "UPDATE chuyen_xe SET ngay_den=?, trang_thai='hoan_thanh', updated_at=datetime('now') WHERE id=?"
+      ).bind(ngayVe, id).run();
+    }
+    await audit('Bulk đã về', `${ids.length} chuyến, ngày về ${ngayVe}`);
+    return c.json({ success: true, count: ids.length });
+  }
+
+  if (body.action === 'delete') {
+    let deleted = 0;
+    for (const id of ids) {
+      // Only delete if the trip has no remaining receipts (avoid orphans)
+      const cnt = await db.prepare('SELECT COUNT(*) AS n FROM lo_hang WHERE chuyen_xe_id=?').bind(id).first<{ n: number }>();
+      if ((cnt?.n || 0) > 0) continue;
+      await db.prepare('DELETE FROM chuyen_xe WHERE id=?').bind(id).run();
+      deleted++;
+    }
+    await audit('Bulk xoá chuyến', `${deleted}/${ids.length} chuyến (bỏ qua chuyến còn phiếu)`);
+    return c.json({ success: true, count: deleted, skipped: ids.length - deleted });
+  }
+
+  if (body.action === 'thanh-toan' || body.action === 'ung') {
+    const ngay = body.ngay || todayStr();
+    const hinhThuc = body.hinhThuc || 'TM';
+    const kieu = body.action === 'ung' ? 'ung' : 'trahet';
+    let created = 0;
+    for (const id of ids) {
+      const ch = await db.prepare(
+        `SELECT cx.id, cx.gia_chuyen, cx.tien_te, cx.da_thanh_toan, cvt.ten AS cty_ten
+         FROM chuyen_xe cx LEFT JOIN xe x ON cx.xe_id=x.id LEFT JOIN cty_van_tai cvt ON x.cty_vt_id=cvt.id
+         WHERE cx.id=?`
+      ).bind(id).first<{ id: string; gia_chuyen: number; tien_te: string; da_thanh_toan: number; cty_ten: string }>();
+      if (!ch) continue;
+      const soTien = body.action === 'ung' ? (Number(body.soTien) || 0) : Number(ch.gia_chuyen) || 0;
+      if (soTien <= 0) continue;
+      const pid = `PC-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+      await db.prepare(
+        `INSERT INTO phieu_chi (id, ngay, dau_muc, so_tien, tien_te, hinh_thuc, ghi_chu, nguoi_nhap, chuyen_xe_id, kieu_qt, gio)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%H:%M','now'))`
+      ).bind(
+        pid, ngay, `Cước vận tải${ch.cty_ten ? ' - ' + ch.cty_ten : ''}`, soTien, ch.tien_te || 'PLN', hinhThuc,
+        body.action === 'ung' ? `Ứng cước chuyến ${id}` : `Thanh toán cước chuyến ${id}`,
+        user.display_name, id, kieu,
+      ).run();
+      // When fully paid, set the paid flag on the trip
+      if (body.action === 'thanh-toan') {
+        await db.prepare(
+          "UPDATE chuyen_xe SET da_thanh_toan=1, ngay_thanh_toan=?, updated_at=datetime('now') WHERE id=?"
+        ).bind(ngay, id).run();
+      }
+      created++;
+    }
+    await audit(body.action === 'ung' ? 'Bulk ứng cước' : 'Bulk thanh toán cước', `${created} phiếu chi, ngày ${ngay}`);
+    return c.json({ success: true, count: created, ngay });
+  }
+
+  return c.json({ error: 'Unknown action' }, 400);
 });

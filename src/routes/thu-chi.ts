@@ -68,7 +68,7 @@ thuChiRoutes.get('/', async (c) => {
   const dmWhere = dauMuc !== 'all' ? `AND dau_muc = ?` : '';
   const qWhere = q ? `AND (ghi_chu LIKE ? OR id LIKE ?)` : '';
 
-  /* ── phieu thu ── */
+  /* ── receipt slips (income) ── */
   const thuQ = `SELECT pt.*, kh.ten as khach_hang_ten, kh.ma_kh
     FROM phieu_thu pt LEFT JOIN khach_hang kh ON pt.khach_hang_id = kh.id
     WHERE ${rangeWhere} ${dmWhere.replace(/dau_muc/g,'pt.dau_muc')} ${qWhere.replace(/ghi_chu/g,'pt.ghi_chu').replace(/\bid\b/g,'pt.id')}
@@ -78,7 +78,7 @@ thuChiRoutes.get('/', async (c) => {
   if (q) { thuBinds.push(`%${q}%`, `%${q}%`); }
   const { results: thuList } = await c.env.DB.prepare(thuQ).bind(...thuBinds).all();
 
-  /* ── phieu chi ── */
+  /* ── expense slips ── */
   const chiQ = `SELECT * FROM phieu_chi
     WHERE ${rangeWhere} ${dmWhere} ${qWhere.replace(/ghi_chu/g,'phieu_chi.ghi_chu').replace(/\bid\b/g,'phieu_chi.id')}
     ORDER BY ngay DESC, gio DESC`;
@@ -98,7 +98,7 @@ thuChiRoutes.get('/', async (c) => {
     `SELECT dau_muc, so_tien, tien_te FROM phieu_chi WHERE ${profitRangeWhere}`
   ).all();
 
-  /* ── warnings: phiếu chi phải thu về but not yet collected ── */
+  /* ── warnings: expense slips marked collect-on-return but not yet collected ── */
   const { results: warnResults } = await c.env.DB.prepare(
     `SELECT pc.*, cx.ngay_di as chuyen_ngay
      FROM phieu_chi pc
@@ -107,7 +107,7 @@ thuChiRoutes.get('/', async (c) => {
      ORDER BY pc.ngay DESC`
   ).all();
 
-  /* ── chốt sổ: daily balances for last N days ── */
+  /* ── daily close: daily balances for last N days ── */
   const csDays = Number(c.req.query('cs_days')) || 7;
   const todayDate = new Date();
   const todayStr = todayDate.toISOString().slice(0, 10);
@@ -147,7 +147,7 @@ thuChiRoutes.get('/', async (c) => {
     sumByCcy[tte].chi += Number(r.so_tien) || 0;
   }
 
-  /* ── render phieu rows ── */
+  /* ── render slip rows ── */
   const allRows: string[] = [];
 
   if (loai === 'all' || loai === 'thu') {
@@ -257,7 +257,7 @@ thuChiRoutes.get('/', async (c) => {
       lnCards += '<p class="text-xs text-bodytext dark:text-darklink mt-2">Thu VT = Σ thu đầu mục VT · Chi VT = Σ chi đầu mục VT · Chi khác = VP+Chi ngoài · LN thuần = LN gộp − Chi khác</p>';
     }
 
-    /* LN gộp by group */
+    /* P&L aggregated by group */
     const groupStats: Record<string, { thuTT: Record<string,number>; chiTT: Record<string,number> }> = {};
     for (const g of Object.keys(DM_GROUP_LABEL) as DauMucGroup[]) {
       groupStats[g] = { thuTT: {}, chiTT: {} };
@@ -296,7 +296,7 @@ thuChiRoutes.get('/', async (c) => {
       groupLines += `<div class="mb-2"><strong class="text-primary">▸ ${esc(label)}:</strong> ${parts.join(' · ')}</div>`;
     }
 
-    /* Top chi by đầu mục */
+    /* Top expenses by category */
     const chiByDM: Record<string, { total: number; count: number; byCcy: Record<string,number> }> = {};
     for (const p of allChiForProfit as R[]) {
       const dm = String(p.dau_muc || '');
@@ -403,7 +403,7 @@ thuChiRoutes.get('/', async (c) => {
       </div>`;
   }
 
-  /* ═══════ SECTION: Chốt sổ ═══════ */
+  /* ═══════ SECTION: Daily close ═══════ */
   const ccys = ['PLN', 'EUR', 'USD'];
   type DailyBal = { dau: Record<string,number>; thu: Record<string,number>; chi: Record<string,number>; cuoi: Record<string,number> };
   const dailyData: Record<string, DailyBal> = {};
@@ -1062,7 +1062,7 @@ thuChiRoutes.get('/doi-soat/:khachId', async (c) => {
         <div class="text-lg font-bold text-success">KHÁCH HÀNG ĐÃ THANH TOÁN ĐỦ</div>
        </div>`;
 
-  /* Phieu hang table */
+  /* Lot/receipt table */
   let phieuHTML = '';
   if (phieuRows.length === 0) {
     phieuHTML = '<div class="text-center text-bodytext py-6">Chưa có phiếu hàng</div>';

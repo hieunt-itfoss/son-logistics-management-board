@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, Role, AppVariables } from '../types';
+import { DM_GROUP_LABEL, type DauMucGroup } from '../types';
 import type { EffectivePerms } from '../utils/permissions';
 import { layout } from '../utils/layout';
 import {
@@ -14,6 +15,7 @@ import {
   parseDelimitedText,
   buildImportPreview,
   csvTemplate,
+  VIRTUAL_XE_ID,
   type ImportType,
   type PhieuDraft,
   type NewKhDraft,
@@ -151,6 +153,7 @@ interface LoRow {
   hang_ten: string;
   ngay_di: string;
   ngay_den: string;
+  tuyen_id: string;
   tuyen_ten: string;
   tuyen_mau: string;
   bien_so: string;
@@ -165,7 +168,7 @@ const LO_HANG_SQL = `
   SELECT lh.*,
     kh.ten as khach_hang_ten, kh.ma_kh,
     h.ten as hang_ten,
-    cx.ngay_di, cx.ngay_den, cx.tai_xe_id,
+    cx.ngay_di, cx.ngay_den, cx.tai_xe_id, cx.tuyen_id,
     t.ten as tuyen_ten, t.mau as tuyen_mau,
     x.bien_so, x.so_xe,
     nv1.ten as nguoi_tao_ten,
@@ -236,38 +239,41 @@ loHangRoutes.get('/', async (c) => {
   }
   // 'all' = no date filter
 
-  // Column filter
-  if (filterCol && filterVal) {
-    if (filterCol === 'nguoiNhan') {
-      conditions.push(`lh.khach_hang_id = ?`);
-      params.push(filterVal);
-    } else if (filterCol === 'nguoiGui') {
-      conditions.push(`lh.hang_id = ?`);
-      params.push(filterVal);
-    } else if (filterCol === 'soXe') {
-      conditions.push(`x.so_xe = ?`);
-      params.push(filterVal);
-    } else if (filterCol === 'bienSo') {
-      conditions.push(`x.bien_so = ?`);
-      params.push(filterVal);
-    } else if (filterCol === 'tuyenVT') {
-      conditions.push(`cx.tuyen_id = ?`);
-      params.push(filterVal);
-    } else if (filterCol === 'ngayLenXe') {
-      conditions.push(`cx.ngay_di = ?`);
-      params.push(filterVal);
-    } else if (filterCol === 'ngayVe') {
-      conditions.push(`cx.ngay_den = ?`);
-      params.push(filterVal);
-    } else if (filterCol === 'nguoiTao') {
-      conditions.push(`lh.nguoi_tao = ?`);
-      params.push(filterVal);
-    } else if (filterCol === 'nguoiThu') {
-      conditions.push(`lh.nguoi_thu = ?`);
-      params.push(filterVal);
-    } else if (filterCol === 'ma') {
-      conditions.push(`lh.chuyen_xe_id = ?`);
-      params.push(filterVal);
+  // Column filter — supports multiple columns at once.
+  // Source: 'filters' param (JSON [{c,v}]) + legacy fc/fv pair (backward compatible).
+  const activeFilters: { c: string; v: string }[] = [];
+  const filtersParam = c.req.query('filters') || '';
+  if (filtersParam) {
+    try {
+      const arr = JSON.parse(filtersParam);
+      if (Array.isArray(arr)) {
+        for (const f of arr) {
+          if (f && f.c && f.v != null && f.v !== '') activeFilters.push({ c: String(f.c), v: String(f.v) });
+        }
+      }
+    } catch { /* ignore invalid filters JSON */ }
+  }
+  if (filterCol && filterVal && !activeFilters.some((f) => f.c === filterCol)) {
+    activeFilters.push({ c: filterCol, v: filterVal });
+  }
+
+  const colToSql: Record<string, string> = {
+    nguoiNhan: 'lh.khach_hang_id = ?',
+    nguoiGui: 'lh.hang_id = ?',
+    soXe: 'x.so_xe = ?',
+    bienSo: 'x.bien_so = ?',
+    tuyenVT: 'cx.tuyen_id = ?',
+    ngayLenXe: 'cx.ngay_di = ?',
+    ngayVe: 'cx.ngay_den = ?',
+    nguoiTao: 'lh.nguoi_tao = ?',
+    nguoiThu: 'lh.nguoi_thu = ?',
+    ma: 'lh.chuyen_xe_id = ?',
+  };
+  for (const f of activeFilters) {
+    const sql = colToSql[f.c];
+    if (sql) {
+      conditions.push(sql);
+      params.push(f.v);
     }
   }
 
@@ -365,28 +371,33 @@ loHangRoutes.get('/', async (c) => {
     return arr.length ? arr.join('<br>') : '0';
   };
 
-  // Filter chip display
-  const filterChips: string[] = [];
-  if (filterCol && filterVal) {
-    const def = COL_DEFS[filterCol as ColKey];
-    // Resolve display value
-    let displayVal = filterVal;
-    if (filterCol === 'nguoiNhan') {
-      const kh = (khRes.results as {id:string;ten:string}[]).find(k => k.id === filterVal);
-      if (kh) displayVal = kh.ten;
-    } else if (filterCol === 'nguoiGui') {
-      const ha = (hangRes.results as {id:string;ten:string}[]).find(h => h.id === filterVal);
-      if (ha) displayVal = ha.ten;
-    } else if (filterCol === 'ngayLenXe' || filterCol === 'ngayVe') {
-      displayVal = fmtDate(filterVal);
+  // Filter chip display (multi-filter)
+  const resolveFilterDisplay = (col: string, val: string): string => {
+    if (col === 'nguoiNhan') {
+      const kh = (khRes.results as { id: string; ten: string }[]).find((k) => k.id === val);
+      return kh ? kh.ten : val;
+    } else if (col === 'nguoiGui') {
+      const ha = (hangRes.results as { id: string; ten: string }[]).find((h) => h.id === val);
+      return ha ? ha.ten : val;
+    } else if (col === 'ngayLenXe' || col === 'ngayVe') {
+      return fmtDate(val);
     }
+    return val;
+  };
+  const filterChips: string[] = [];
+  activeFilters.forEach((f, idx) => {
+    const def = COL_DEFS[f.c as ColKey];
+    const displayVal = resolveFilterDisplay(f.c, f.v);
+    // Remove this filter, keep the rest
+    const remain = activeFilters.filter((_, i) => i !== idx);
+    const remainUrl = buildGridUrl(c, { fc: '', fv: '', filters: remain.length ? JSON.stringify(remain) : '' });
     filterChips.push(`
       <span class="htql-chip">
-        <strong>${def?.label || filterCol}:</strong> ${esc(displayVal)}
-        <a href="${buildGridUrl(c, { fc:'', fv:'' })}" class="htql-chip-remove">&times;</a>
+        <strong>${def?.label || f.c}:</strong> ${esc(displayVal)}
+        <a href="${remainUrl}" class="htql-chip-remove">&times;</a>
       </span>
     `);
-  }
+  });
 
   // ─── Build HTML ────────────────────────────────────────────
   let html = '<div class="htql-dt" data-htql-dt>';
@@ -404,6 +415,7 @@ loHangRoutes.get('/', async (c) => {
   html += `<form method="GET" action="/lo-hang" class="flex flex-wrap items-center gap-2" id="filterForm">`;
   html += `<input type="hidden" name="fc" value="${esc(filterCol)}">`;
   html += `<input type="hidden" name="fv" value="${esc(filterVal)}">`;
+  html += `<input type="hidden" name="filters" value="${esc(filtersParam)}">`;
   html += `<input type="hidden" name="hide" value="${esc(hiddenCols)}">`;
   html += `<input type="hidden" name="collapsed" value="${esc(collapsedParam)}">`;
 
@@ -493,10 +505,13 @@ loHangRoutes.get('/', async (c) => {
     const isHang = def?.group === 'hang';
     const isMoney = def?.group === 'money';
     const groupCls = isHang ? ' htql-col-hang' : isMoney ? ' htql-col-money' : '';
-    const hasFilter = col === filterCol ? ' style="outline:2px solid var(--primary);outline-offset:-2px"' : '';
+    const isActiveFilterCol = activeFilters.some((f) => f.c === col);
+    const hasFilter = isActiveFilterCol ? ' style="outline:2px solid var(--primary);outline-offset:-2px"' : '';
     const sortable = true;
-    const filterLink = def?.filterable ? ` <a href="${buildFilterUrl(c, col)}" class="text-primary hover:opacity-70 no-underline" title="Lọc theo ${def?.label}" style="font-size:10px">&#9662;</a>` : '';
-    html += `<th class="${sortable ? 'htql-dt-sortable' : ''}${groupCls}"${hasFilter}>`;
+    const filterLink = def?.filterable
+      ? ` <a href="javascript:void(0)" onclick="htqlOpenColFilter('${col}', event)" class="text-primary hover:opacity-70 no-underline" title="Lọc theo ${def?.label}" style="font-size:10px">&#9662;</a>`
+      : '';
+    html += `<th class="${sortable ? 'htql-dt-sortable' : ''}${groupCls}"${hasFilter} data-col="${col}">`;
     html += `<div class="htql-dt-th-inner">${def?.label || col}${filterLink}`;
     if (sortable) html += ` <iconify-icon icon="solar:sort-vertical-linear" class="htql-dt-sort-icon" width="14"></iconify-icon>`;
     html += `</div></th>`;
@@ -651,7 +666,22 @@ loHangRoutes.get('/', async (c) => {
               sortVal = String(lo.so_tien_hang || 0);
               break;
           }
-          html += `<td class="text-xs${tdCls}${align}"${sortVal ? ` data-sort="${esc(sortVal)}"` : ''}>${v}</td>`;
+          // Filter value (must match server-side colToSql)
+          let fval = '';
+          switch (col) {
+            case 'nguoiNhan': fval = String(lo.khach_hang_id || ''); break;
+            case 'nguoiGui': fval = String(lo.hang_id || ''); break;
+            case 'soXe': fval = String(lo.so_xe || ''); break;
+            case 'bienSo': fval = String(lo.bien_so || ''); break;
+            case 'tuyenVT': fval = String(lo.tuyen_id || ''); break;
+            case 'ngayLenXe': fval = String(lo.ngay_di || ''); break;
+            case 'ngayVe': fval = String(lo.ngay_den || ''); break;
+            case 'nguoiTao': fval = String(lo.nguoi_tao || ''); break;
+            case 'nguoiThu': fval = String(lo.nguoi_thu || ''); break;
+            case 'ma': fval = String(lo.chuyen_xe_id || ''); break;
+          }
+          const fAttr = (COL_DEFS[col]?.filterable && fval) ? ` data-col="${col}" data-fval="${esc(fval)}"` : '';
+          html += `<td class="text-xs${tdCls}${align}"${sortVal ? ` data-sort="${esc(sortVal)}"` : ''}${fAttr}>${v}</td>`;
         });
         if (perm.canEdit) {
           html += `<td class="text-xs">
@@ -699,12 +729,21 @@ loHangRoutes.get('/', async (c) => {
   html += `</div>`;
 
   // Bulk action bar
-  html += `<div id="bulkBar" class="hidden fixed bottom-0 left-0 right-0 bg-primary text-white px-6 py-3 flex items-center gap-3 z-50 shadow-lg">
-    <span id="bulkCount" class="font-semibold">0 phiếu đã chọn:</span>
-    <button onclick="bulkAction('tra-hang')" class="htql-dt-btn" style="border-color:rgba(255,255,255,0.3);color:#fff">Đã trả hàng</button>
-    <button onclick="bulkAction('print')" class="htql-dt-btn" style="border-color:rgba(255,255,255,0.3);color:#fff">In nhãn</button>
-    <button onclick="clearSelection()" class="htql-dt-btn ml-auto" style="border-color:rgba(255,255,255,0.3);color:#fff">Bỏ chọn</button>
-  </div>`;
+  html += `<div id="bulkBar" class="hidden fixed bottom-0 left-0 right-0 bg-primary text-white px-4 py-3 flex flex-wrap items-center gap-2 z-50 shadow-lg">
+    <span id="bulkCount" class="font-semibold mr-2">0 phiếu:</span>
+    <button onclick="bulkAction('tra-hang')" class="htql-bulk-btn">📦 Đã trả hàng</button>
+    <button onclick="bulkThanhToan()" class="htql-bulk-btn">💰 Đã thanh toán</button>
+    <button onclick="bulkGanNguoiThu()" class="htql-bulk-btn">👤 Gán người thu</button>
+    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🚛 Lên xe (gán chuyến)</button>
+    <button onclick="bulkChuyenDaVe()" class="htql-bulk-btn">📅 Đã về</button>
+    <button onclick="bulkAction('duplicate')" class="htql-bulk-btn">📋 Sao chép</button>
+    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🔀 Move chuyến</button>
+    <button onclick="bulkExportCsv()" class="htql-bulk-btn">⬇ Export CSV</button>
+    <button onclick="bulkAction('print')" class="htql-bulk-btn">🏷 In nhãn</button>
+    <button onclick="bulkAction('delete')" class="htql-bulk-btn" style="background:rgba(255,80,80,0.25)">🗑 Xoá</button>
+    <button onclick="clearSelection()" class="htql-bulk-btn ml-auto">✕ Bỏ chọn</button>
+  </div>
+  <style>.htql-bulk-btn{border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:4px 10px;font-size:13px;background:rgba(255,255,255,0.1)}.htql-bulk-btn:hover{background:rgba(255,255,255,0.25)}</style>`;
 
   // Client-side scripts
   html += `<script>
@@ -776,16 +815,140 @@ loHangRoutes.get('/', async (c) => {
   async function bulkAction(action) {
     const ids = Array.from(document.querySelectorAll('.lo-check:checked')).map(cb => cb.value);
     if (ids.length === 0) return;
-    if (action === 'tra-hang') {
-      if (!confirm('Đánh dấu đã trả hàng cho ' + ids.length + ' phiếu?')) return;
-      const res = await fetch('/lo-hang/api/lo-hang/bulk', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ action: 'tra-hang', ids })
-      });
-      if (res.ok) { location.reload(); } else { const err = await res.json(); alert(err.error || 'Lỗi'); }
+    if (action === 'print') {
+      // Print labels: open print window for selected receipts
+      const rows = ids.map(id => '<div style="border:1px solid #000;padding:8px;margin:4px;font:13px monospace">' + id + '</div>').join('');
+      const w = window.open('', '_blank');
+      w.document.write('<h3>Nhãn ' + ids.length + ' phiếu</h3>' + rows);
+      w.document.close(); w.focus(); w.print();
+      return;
     }
+    let confirmMsg = '';
+    if (action === 'tra-hang') confirmMsg = 'Đánh dấu đã trả hàng cho ' + ids.length + ' phiếu?';
+    else if (action === 'duplicate') confirmMsg = 'Sao chép ' + ids.length + ' phiếu?';
+    else if (action === 'delete') confirmMsg = 'XOÁ ' + ids.length + ' phiếu? Không thể hoàn tác.';
+    if (confirmMsg && !confirm(confirmMsg)) return;
+    const res = await fetch('/lo-hang/api/lo-hang/bulk', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action, ids })
+    });
+    if (res.ok) { location.reload(); } else { const err = await res.json(); alert(err.error || 'Lỗi'); }
   }
+
+  function bulkSelectedIds() {
+    return Array.from(document.querySelectorAll('.lo-check:checked')).map(cb => cb.value);
+  }
+
+  async function bulkGanNguoiThu() {
+    const ids = bulkSelectedIds(); if (!ids.length) return;
+    const nguoiThu = prompt('Nhập tên người thu cho ' + ids.length + ' phiếu:');
+    if (nguoiThu === null) return;
+    const res = await fetch('/lo-hang/api/lo-hang/bulk', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action: 'gan-nguoi-thu', ids, nguoiThu })
+    });
+    if (res.ok) location.reload(); else alert((await res.json()).error || 'Lỗi');
+  }
+
+  async function bulkGanChuyen() {
+    const ids = bulkSelectedIds(); if (!ids.length) return;
+    const chuyenId = prompt('Nhập MÃ CHUYẾN đích để gán ' + ids.length + ' phiếu vào (vd: W260526-50).\\nPhiếu đang ở nhóm chờ xe (CX) sẽ tự đổi mã sang chuyến này:');
+    if (!chuyenId) return;
+    const res = await fetch('/lo-hang/api/lo-hang/bulk', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action: 'gan-chuyen', ids, chuyenXeId: chuyenId.trim() })
+    });
+    if (res.ok) location.reload(); else alert((await res.json()).error || 'Lỗi');
+  }
+
+  function bulkExportCsv() {
+    const ids = bulkSelectedIds(); if (!ids.length) return;
+    // Export CSV client-side from the current table
+    const headers = [];
+    document.querySelectorAll('table thead th').forEach(th => headers.push((th.textContent||'').trim()));
+    const lines = [headers.join(',')];
+    document.querySelectorAll('.lo-check:checked').forEach(cb => {
+      const tr = cb.closest('tr'); const cells = [];
+      tr.querySelectorAll('td').forEach(td => { let t=(td.textContent||'').trim().replace(/"/g,'""'); cells.push('"'+t+'"'); });
+      lines.push(cells.join(','));
+    });
+    const blob = new Blob(['\\uFEFF'+lines.join('\\n')], {type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'phieu_export_' + Date.now() + '.csv'; a.click();
+  }
+
+  async function bulkChuyenDaVe() {
+    const ids = bulkSelectedIds(); if (!ids.length) return;
+    // "Returned" applies to TRIPS of the selected receipts
+    const chuyens = Array.from(new Set(Array.from(document.querySelectorAll('.lo-check:checked')).map(cb => {
+      const tr = cb.closest('tr'); return tr ? tr.getAttribute('data-group') : null;
+    }).filter(Boolean)));
+    if (!chuyens.length) { alert('Không xác định được chuyến của các phiếu đã chọn.'); return; }
+    const ngay = prompt('Ngày về cho ' + chuyens.length + ' chuyến (YYYY-MM-DD), để trống = hôm nay:', new Date().toISOString().slice(0,10));
+    if (ngay === null) return;
+    const res = await fetch('/chuyen-xe/api/chuyen-xe/bulk', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action: 'da-ve', ids: chuyens, ngay: ngay || undefined })
+    });
+    if (res.ok) location.reload(); else alert((await res.json()).error || 'Lỗi');
+  }
+
+  async function bulkThanhToan() {
+    const ids = bulkSelectedIds(); if (!ids.length) return;
+    htqlBulkTTOpen(ids);
+  }
+
+  // ── Header filter popover (multi-filter) ──
+  window.htqlOpenColFilter = function(col, ev) {
+    ev.stopPropagation();
+    document.querySelectorAll('.htql-colfilter-pop').forEach(function(p){ p.remove(); });
+    // Collect unique column values from the table: display text, filter by data-fval
+    var map = new Map();
+    document.querySelectorAll('td[data-col="' + col + '"]').forEach(function(td){
+      var fval = td.getAttribute('data-fval'); if (!fval) return;
+      var label = (td.textContent || '').trim() || fval;
+      if (!map.has(fval)) map.set(fval, label);
+    });
+    if (map.size === 0) { alert('Không có giá trị để lọc ở cột này (trong trang hiện tại).'); return; }
+    var pop = document.createElement('div');
+    pop.className = 'htql-colfilter-pop';
+    pop.style.cssText = 'position:absolute;z-index:70;background:#fff;border:1px solid #ccc;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:8px;min-width:200px;max-height:300px;overflow:auto;font-size:13px';
+    var items = Array.from(map.entries());
+    pop.innerHTML = '<input type="text" placeholder="Tìm..." class="cf-search" style="width:100%;padding:4px 6px;border:1px solid #ddd;border-radius:4px;margin-bottom:6px">' +
+      '<div class="cf-list">' + items.map(function(e){
+        return '<div class="cf-item" data-v="' + e[0].replace(/"/g,'&quot;') + '" style="padding:4px 6px;cursor:pointer;border-radius:4px">' + (e[1].replace(/</g,'&lt;')) + '</div>';
+      }).join('') + '</div>';
+    document.body.appendChild(pop);
+    var r = ev.target.getBoundingClientRect();
+    pop.style.left = (window.scrollX + r.left) + 'px';
+    pop.style.top = (window.scrollY + r.bottom + 4) + 'px';
+    pop.querySelector('.cf-search').addEventListener('input', function(){
+      var q = this.value.toLowerCase();
+      pop.querySelectorAll('.cf-item').forEach(function(it){ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+    });
+    pop.querySelectorAll('.cf-item').forEach(function(it){
+      it.addEventListener('mouseenter', function(){ it.style.background = '#eef2ff'; });
+      it.addEventListener('mouseleave', function(){ it.style.background = ''; });
+      it.addEventListener('click', function(){ htqlAddColFilter(col, it.getAttribute('data-v')); });
+    });
+    setTimeout(function(){
+      document.addEventListener('click', function closer(e){
+        if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', closer); }
+      });
+    }, 0);
+  };
+  window.htqlAddColFilter = function(col, val) {
+    var url = new URL(window.location.href);
+    var filters = [];
+    try { filters = JSON.parse(url.searchParams.get('filters') || '[]'); } catch(e){ filters = []; }
+    // Merge legacy fc/fv pair into filters if present
+    var oldC = url.searchParams.get('fc'), oldV = url.searchParams.get('fv');
+    if (oldC && oldV && !filters.some(function(f){return f.c===oldC;})) filters.push({c:oldC, v:oldV});
+    if (!filters.some(function(f){ return f.c===col && f.v===val; })) filters.push({ c: col, v: val });
+    url.searchParams.set('filters', JSON.stringify(filters));
+    url.searchParams.delete('fc'); url.searchParams.delete('fv');
+    window.location.href = url.toString();
+  };
 
   window.importPreview = null;
   function openImportModal() {
@@ -888,7 +1051,92 @@ loHangRoutes.get('/', async (c) => {
     r.onerror = () => alert('Không đọc được file');
     r.readAsText(file);
   }
-  </script>`;
+
+  // ── Bulk "Paid" modal ──
+  var BULK_TT_IDS = [];
+  var IS_ADMIN = ${role === 'admin' ? 'true' : 'false'};
+  window.htqlBulkTTOpen = function(ids){
+    BULK_TT_IDS = ids;
+    var m = document.getElementById('bulkTTModal');
+    document.getElementById('bulkTTCount').textContent = ids.length;
+    var today = new Date().toISOString().slice(0,10);
+    var d = document.getElementById('bulkTTNgay'); d.value = today; d.max = '';
+    document.getElementById('bulkTTLoai').value = 'vantai';
+    document.getElementById('bulkTTHinhThuc').value = 'TM';
+    document.getElementById('bulkTTWarn').classList.add('hidden');
+    var ngoaiWrap = document.getElementById('bulkTTNgoaiWrap');
+    if (IS_ADMIN) { ngoaiWrap.classList.remove('hidden'); } else { ngoaiWrap.classList.add('hidden'); }
+    document.getElementById('bulkTTNgoai').checked = false;
+    m.classList.remove('hidden'); m.classList.add('flex');
+  };
+  window.htqlBulkTTClose = function(){
+    var m = document.getElementById('bulkTTModal'); m.classList.add('hidden'); m.classList.remove('flex');
+  };
+  // Warn when a past date is chosen (affects balances/daily close on later days)
+  document.addEventListener('change', function(e){
+    if (e.target && e.target.id === 'bulkTTNgay') {
+      var today = new Date().toISOString().slice(0,10);
+      var w = document.getElementById('bulkTTWarn');
+      if (e.target.value && e.target.value < today) w.classList.remove('hidden'); else w.classList.add('hidden');
+    }
+  });
+  window.htqlBulkTTSubmit = async function(){
+    var ngoaiSo = IS_ADMIN && document.getElementById('bulkTTNgoai').checked;
+    var payload = { ids: BULK_TT_IDS };
+    if (ngoaiSo) {
+      payload.khongVaoSo = true;
+    } else {
+      payload.ngay = document.getElementById('bulkTTNgay').value;
+      payload.loaiTien = document.getElementById('bulkTTLoai').value;
+      payload.hinhThuc = document.getElementById('bulkTTHinhThuc').value;
+      var today = new Date().toISOString().slice(0,10);
+      if (payload.ngay < today && !confirm('Ngày ' + payload.ngay + ' là ngày quá khứ. Thêm phiếu thu sẽ LÀM THAY ĐỔI số dư/chốt sổ các ngày sau đó. Tiếp tục?')) return;
+    }
+    var res = await fetch('/lo-hang/api/lo-hang/bulk-thanh-toan', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    if (res.ok) { var d = await res.json(); alert(ngoaiSo ? ('Đã đánh dấu TT ngoài sổ ' + d.count + ' phiếu') : ('Đã tạo ' + d.soPhieuThu + ' phiếu thu (ngày ' + d.ngay + ')')); location.reload(); }
+    else { alert((await res.json()).error || 'Lỗi'); }
+  };
+  </script>
+
+  <div id="bulkTTModal" class="hidden fixed inset-0 bg-black/50 z-[60] items-center justify-center p-4" onclick="if(event.target===this)htqlBulkTTClose()">
+    <div class="bg-white dark:bg-darkgray rounded-lg shadow-xl w-full max-w-md p-5">
+      <h3 class="text-lg font-semibold mb-3 text-dark dark:text-white">💰 Đã thanh toán <span id="bulkTTCount" class="text-primary">0</span> phiếu</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Loại tiền thu</label>
+          <select id="bulkTTLoai" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:bg-darkgray dark:border-darkborder">
+            <option value="vantai">Vận tải (thành tiền)</option>
+            <option value="tienhang">Tiền hàng</option>
+            <option value="ca-hai">Cả hai (tạo 2 nhóm phiếu thu)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Ngày thu</label>
+          <input type="date" id="bulkTTNgay" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:bg-darkgray dark:border-darkborder">
+          <p id="bulkTTWarn" class="hidden text-xs text-error mt-1">⚠ Ngày quá khứ — sẽ làm thay đổi số dư/chốt sổ các ngày sau.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Hình thức</label>
+          <select id="bulkTTHinhThuc" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:bg-darkgray dark:border-darkborder">
+            <option value="TM">Tiền mặt</option>
+            <option value="CK">Chuyển khoản</option>
+          </select>
+        </div>
+        <div id="bulkTTNgoaiWrap" class="hidden border-t pt-3">
+          <label class="flex items-start gap-2 text-sm">
+            <input type="checkbox" id="bulkTTNgoai" class="mt-0.5 rounded border-gray-300">
+            <span>Đã thanh toán nhưng <strong>KHÔNG vào sổ</strong> thu chi (chỉ admin thấy, không tạo phiếu thu)</span>
+          </label>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-5">
+        <button onclick="htqlBulkTTClose()" class="px-4 py-2 text-sm rounded-md border border-gray-300">Huỷ</button>
+        <button onclick="htqlBulkTTSubmit()" class="px-4 py-2 text-sm rounded-md bg-primary text-white">Xác nhận</button>
+      </div>
+    </div>
+  </div>`;
 
   if (perm.canCreateLo) {
     html += `
@@ -1247,7 +1495,7 @@ loHangRoutes.get('/:id', async (c) => {
     `SELECT * FROM audit_log WHERE target = ? ORDER BY ngay DESC, gio DESC LIMIT 20`
   ).bind(id).all();
 
-  // Related phieu thu
+  // Related receipt slips
   const phieuThuRes = await c.env.DB.prepare(
     `SELECT pt.* FROM phieu_thu pt WHERE pt.lo_ids LIKE ? ORDER BY pt.ngay DESC`
   ).bind(`%"${id}%"`).all();
@@ -1329,7 +1577,7 @@ loHangRoutes.get('/:id', async (c) => {
   html += infoRow('Người thu', lo.nguoi_thu_ten ? esc(lo.nguoi_thu_ten) : '\u2014');
   html += `</div></div>`;
 
-  // Related phieu thu
+  // Related receipt slips
   const phieuThus = phieuThuRes.results as {id:string;ngay:string;dau_muc:string;loai_tien:string;kieu_qt:string;so_tien:number;tien_te:string;gio:string}[];
   if (phieuThus.length > 0) {
     html += `<div class="bg-white rounded-lg shadow p-5 mb-4">
@@ -1649,35 +1897,207 @@ loHangRoutes.delete('/api/lo-hang/:id', async (c) => {
 // ─── POST /api/lo-hang/bulk — Bulk Operations ────────────────
 loHangRoutes.post('/api/lo-hang/bulk', async (c) => {
   const user = c.get('user');
-  const { action, ids } = await c.req.json<{ action: string; ids: string[] }>();
+  const body = await c.req.json<{
+    action: string;
+    ids: string[];
+    nguoiThu?: string;
+    chuyenXeId?: string;
+    xeId?: string;
+  }>();
+  const { action, ids } = body;
 
   if (!ids || ids.length === 0) {
     return c.json({ error: 'No IDs provided' }, 400);
   }
 
-  if (action === 'tra-hang') {
-    // Set da_tra_hang = so_kien for each selected lo
-    for (const id of ids) {
-      const lo = await c.env.DB.prepare('SELECT so_kien FROM lo_hang WHERE id=?').bind(id).first<{so_kien: number}>();
-      if (lo) {
-        await c.env.DB.prepare('UPDATE lo_hang SET da_tra_hang=?, updated_at=datetime(\'now\') WHERE id=?')
-          .bind(lo.so_kien, id).run();
-      }
-    }
-    // Audit
+  const now = "datetime('now')";
+  const audit = async (hanhDong: string) => {
     await c.env.DB.prepare(
       `INSERT INTO audit_log (id, ngay, gio, nguoi, nguoi_label, hanh_dong, target, chi_tiet)
-       VALUES (?, date('now'), strftime('%H:%M','now'), ?, ?, 'Bulk trả hàng', 'bulk', ?)`
-    ).bind(
-      `AL-${Date.now()}`,
-      user.role,
-      user.display_name,
-      `${ids.length} phiếu: ${ids.join(', ')}`
-    ).run();
+       VALUES (?, date('now'), strftime('%H:%M','now'), ?, ?, ?, 'bulk', ?)`
+    ).bind(`AL-${Date.now()}`, user.role, user.display_name, hanhDong, `${ids.length} phiếu: ${ids.join(', ')}`).run();
+  };
+
+  if (action === 'tra-hang') {
+    for (const id of ids) {
+      const lo = await c.env.DB.prepare('SELECT so_kien FROM lo_hang WHERE id=?').bind(id).first<{ so_kien: number }>();
+      if (lo) {
+        await c.env.DB.prepare(`UPDATE lo_hang SET da_tra_hang=?, updated_at=${now} WHERE id=?`).bind(lo.so_kien, id).run();
+      }
+    }
+    await audit('Bulk trả hàng');
+    return c.json({ success: true, count: ids.length });
+  }
+
+  if (action === 'gan-nguoi-thu') {
+    const nguoiThu = (body.nguoiThu || '').trim();
+    for (const id of ids) {
+      await c.env.DB.prepare(`UPDATE lo_hang SET nguoi_thu=?, updated_at=${now} WHERE id=?`).bind(nguoiThu, id).run();
+    }
+    await audit(`Bulk gán người thu: ${nguoiThu || '(trống)'}`);
+    return c.json({ success: true, count: ids.length });
+  }
+
+  if (action === 'gan-chuyen') {
+    // Assign receipts to a real trip. If a receipt is on an awaiting-vehicle trip (CX),
+    // rename it to the new trip code: <newTrip>-<old suffix>.
+    const chuyenMoi = (body.chuyenXeId || '').trim();
+    if (!chuyenMoi) return c.json({ error: 'Thiếu mã chuyến đích' }, 400);
+    const ch = await c.env.DB.prepare('SELECT id FROM chuyen_xe WHERE id=?').bind(chuyenMoi).first<{ id: string }>();
+    if (!ch) return c.json({ error: 'Chuyến đích không tồn tại' }, 400);
+    let changed = 0;
+    for (const id of ids) {
+      const lo = await c.env.DB.prepare('SELECT chuyen_xe_id FROM lo_hang WHERE id=?').bind(id).first<{ chuyen_xe_id: string }>();
+      if (!lo) continue;
+      // Build new ID: tail after the last '-' of the old trip (customer code / seq), append to new trip
+      let newId = id;
+      const oldCh = lo.chuyen_xe_id || '';
+      if (oldCh && id.startsWith(oldCh)) {
+        const tail = id.slice(oldCh.length).replace(/^-/, ''); // suffix after old trip code
+        newId = tail ? `${chuyenMoi}-${tail}` : `${chuyenMoi}`;
+      }
+      // Avoid duplicate target ID
+      if (newId !== id) {
+        const dup = await c.env.DB.prepare('SELECT id FROM lo_hang WHERE id=?').bind(newId).first();
+        if (dup) newId = `${newId}-${Date.now().toString().slice(-3)}`;
+        await c.env.DB.prepare(`UPDATE lo_hang SET id=?, chuyen_xe_id=?, updated_at=${now} WHERE id=?`).bind(newId, chuyenMoi, id).run();
+      } else {
+        await c.env.DB.prepare(`UPDATE lo_hang SET chuyen_xe_id=?, updated_at=${now} WHERE id=?`).bind(chuyenMoi, id).run();
+      }
+      changed++;
+    }
+    await audit(`Bulk gán chuyến: ${chuyenMoi}`);
+    return c.json({ success: true, count: changed });
+  }
+
+  if (action === 'duplicate') {
+    let created = 0;
+    for (const id of ids) {
+      const lo = await c.env.DB.prepare('SELECT * FROM lo_hang WHERE id=?').bind(id).first<Record<string, unknown>>();
+      if (!lo) continue;
+      const newId = `${id}-COPY${Date.now().toString().slice(-4)}`;
+      await c.env.DB.prepare(
+        `INSERT INTO lo_hang (id, chuyen_xe_id, khach_hang_id, hang_id, so_kien, da_tra_hang,
+         ly_do_thieu, don_gia, tien_te, thanh_tien, so_tien_hang, giam_gia, nguoi_tao, nguoi_thu, created_at, updated_at)
+         SELECT ?, chuyen_xe_id, khach_hang_id, hang_id, so_kien, da_tra_hang,
+         ly_do_thieu, don_gia, tien_te, thanh_tien, so_tien_hang, giam_gia, nguoi_tao, nguoi_thu, ${now}, ${now}
+         FROM lo_hang WHERE id=?`
+      ).bind(newId, id).run();
+      created++;
+    }
+    await audit('Bulk sao chép phiếu');
+    return c.json({ success: true, count: created });
+  }
+
+  if (action === 'delete') {
+    for (const id of ids) {
+      await c.env.DB.prepare('DELETE FROM lo_hang WHERE id=?').bind(id).run();
+    }
+    await audit('Bulk xoá phiếu');
     return c.json({ success: true, count: ids.length });
   }
 
   return c.json({ error: 'Unknown action' }, 400);
+});
+
+// ─── POST /api/lo-hang/bulk-thanh-toan — Mark as paid ───
+// Create receipt slips (kieu_qt='trahet') grouped by customer + category + currency; or
+// mark "paid outside ledger" (admin only) — no receipt slip, visible to admin only.
+loHangRoutes.post('/api/lo-hang/bulk-thanh-toan', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json<{
+    ids: string[];
+    ngay?: string;
+    loaiTien?: 'vantai' | 'tienhang' | 'ca-hai';
+    khongVaoSo?: boolean;
+    hinhThuc?: 'TM' | 'CK';
+  }>();
+  const ids = body.ids || [];
+  if (ids.length === 0) return c.json({ error: 'Chưa chọn phiếu' }, 400);
+
+  // Case C: paid outside ledger — admin only
+  if (body.khongVaoSo) {
+    if (user.role !== 'admin') return c.json({ error: 'Chỉ admin được đánh dấu thanh toán ngoài sổ' }, 403);
+    for (const id of ids) {
+      await c.env.DB.prepare("UPDATE lo_hang SET da_tt_ngoai_so=1, updated_at=datetime('now') WHERE id=?").bind(id).run();
+    }
+    await c.env.DB.prepare(
+      `INSERT INTO audit_log (id, ngay, gio, nguoi, nguoi_label, hanh_dong, target, chi_tiet)
+       VALUES (?, date('now'), strftime('%H:%M','now'), ?, ?, 'TT ngoài sổ (admin)', 'bulk', ?)`
+    ).bind(`AL-${Date.now()}`, user.role, user.display_name, `${ids.length} phiếu`).run();
+    return c.json({ success: true, count: ids.length, mode: 'ngoai-so' });
+  }
+
+  // Case A/B: create real receipt slips
+  const ngay = body.ngay || new Date().toISOString().slice(0, 10);
+  const loaiTien = body.loaiTien || 'vantai';
+  const hinhThuc = body.hinhThuc || 'TM';
+  const wantVT = loaiTien === 'vantai' || loaiTien === 'ca-hai';
+  const wantTH = loaiTien === 'tienhang' || loaiTien === 'ca-hai';
+
+  // Load selected receipt details (including category from route)
+  const placeholders = ids.map(() => '?').join(',');
+  const { results: lots } = await c.env.DB.prepare(
+    `SELECT lh.id, lh.khach_hang_id, lh.thanh_tien, lh.giam_gia, lh.tien_te,
+            lh.so_tien_hang, lh.tien_te_th, t.dau_muc_group
+     FROM lo_hang lh
+     LEFT JOIN chuyen_xe cx ON lh.chuyen_xe_id = cx.id
+     LEFT JOIN tuyen t ON cx.tuyen_id = t.id
+     WHERE lh.id IN (${placeholders})`
+  ).bind(...ids).all<Record<string, unknown>>();
+
+  // Group by customer + category + currency + amount type
+  type Grp = { khId: string; dauMuc: string; tte: string; loai: 'vantai' | 'tienhang'; tong: number; loIds: string[] };
+  const groups = new Map<string, Grp>();
+  for (const lo of lots) {
+    const khId = String(lo.khach_hang_id);
+    const dmg = String(lo.dau_muc_group || 'khac') as DauMucGroup;
+    const dauMuc = DM_GROUP_LABEL[dmg] || 'Vận tải khác';
+    if (wantVT) {
+      const tt = Number(lo.thanh_tien) - Number(lo.giam_gia || 0);
+      if (tt > 0) {
+        const tte = String(lo.tien_te || 'PLN');
+        const key = `${khId}|${dauMuc}|${tte}|vantai`;
+        if (!groups.has(key)) groups.set(key, { khId, dauMuc, tte, loai: 'vantai', tong: 0, loIds: [] });
+        const g = groups.get(key)!;
+        g.tong += tt;
+        g.loIds.push(String(lo.id));
+      }
+    }
+    if (wantTH) {
+      const th = Number(lo.so_tien_hang || 0);
+      if (th > 0) {
+        const tte = String(lo.tien_te_th || lo.tien_te || 'PLN');
+        const key = `${khId}|${dauMuc}|${tte}|tienhang`;
+        if (!groups.has(key)) groups.set(key, { khId, dauMuc, tte, loai: 'tienhang', tong: 0, loIds: [] });
+        const g = groups.get(key)!;
+        g.tong += th;
+        g.loIds.push(String(lo.id));
+      }
+    }
+  }
+
+  if (groups.size === 0) return c.json({ error: 'Các phiếu đã chọn không có khoản phải thu phù hợp' }, 400);
+
+  let created = 0;
+  for (const g of groups.values()) {
+    const id = `PT-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+    await c.env.DB.prepare(
+      `INSERT INTO phieu_thu (id, ngay, khach_hang_id, dau_muc, kieu_qt, loai_tien, lo_ids, so_tien, tien_te, hinh_thuc, ghi_chu, nguoi_nhap, gio)
+       VALUES (?, ?, ?, ?, 'trahet', ?, ?, ?, ?, ?, ?, ?, strftime('%H:%M','now'))`
+    ).bind(
+      id, ngay, g.khId, g.dauMuc, g.loai, JSON.stringify(g.loIds), g.tong, g.tte, hinhThuc,
+      `Bulk thanh toán ${g.loIds.length} phiếu`, user.display_name,
+    ).run();
+    created++;
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO audit_log (id, ngay, gio, nguoi, nguoi_label, hanh_dong, target, chi_tiet)
+     VALUES (?, date('now'), strftime('%H:%M','now'), ?, ?, 'Bulk thanh toán', 'bulk', ?)`
+  ).bind(`AL-${Date.now()}`, user.role, user.display_name, `${ids.length} phiếu -> ${created} phiếu thu, ngày ${ngay}`).run();
+
+  return c.json({ success: true, soPhieuThu: created, ngay });
 });
 
 // ─── Import APIs ───────────────────────────────────────────────
@@ -1686,7 +2106,7 @@ async function loadImportContext(db: D1Database) {
     db.prepare('SELECT id, ma_kh, ten FROM khach_hang').all<KhRow>(),
     db.prepare('SELECT id, ten FROM hang').all<{ id: string; ten: string }>(),
     db.prepare('SELECT id, ten FROM cty_van_tai').all<{ id: string; ten: string }>(),
-    db.prepare('SELECT id, ten, tien_to FROM tuyen').all<{ id: string; ten: string; tien_to: string }>(),
+    db.prepare('SELECT id, ten, tien_to, dau_muc_group FROM tuyen').all<{ id: string; ten: string; tien_to: string; dau_muc_group: string }>(),
     db.prepare('SELECT id, so_xe, bien_so, tai_xe_id FROM xe').all<XeRow>(),
     db.prepare('SELECT id, xe_id, tuyen_id, ngay_di FROM chuyen_xe').all<ChuyenRow>(),
   ]);
@@ -1725,7 +2145,7 @@ loHangRoutes.post('/api/import/parse', async (c) => {
   const perm = loHangPerm(c.get('perms'));
   if (!perm.canCreateLo) return c.json({ error: 'Forbidden' }, 403);
 
-  const body = await c.req.json<{ type: ImportType; text: string }>();
+  const body = await c.req.json<{ type: ImportType; text: string; importDate?: string }>();
   const type = body.type;
   if (!type || !body.text) return c.json({ error: 'Thiếu type hoặc text' }, 400);
 
@@ -1733,6 +2153,7 @@ loHangRoutes.post('/api/import/parse', async (c) => {
   if (parsed.rows.length === 0) return c.json({ error: 'Không có dòng dữ liệu' }, 400);
 
   const ctx = await loadImportContext(c.env.DB);
+  if (body.importDate) (ctx as { importDate?: string }).importDate = body.importDate;
   const preview = buildImportPreview(type, parsed.rows, ctx);
   return c.json({ type, ...preview });
 });
@@ -1842,14 +2263,29 @@ loHangRoutes.post('/api/import/confirm', async (c) => {
       xeKeyToId.set(x.so_xe.trim().toLowerCase().replace(/\s+/g, ' '), id);
     }
 
+    // Awaiting-vehicle trips (xe_id = VIRTUAL_XE_ID)? Pre-create virtual vehicle + empty supplier placeholder
+    // to satisfy NOT NULL FK constraints on chuyen_xe.xe_id and lo_hang.hang_id.
+    const coChoXe = (body.newChuyens || []).some((ch) => ch.xe_id === VIRTUAL_XE_ID);
+    if (coChoXe) {
+      await db.prepare(
+        `INSERT OR IGNORE INTO xe (id, bien_so, so_xe, loai_xe, trong_tai, tai_xe_id, created_at, updated_at)
+         VALUES (?, '(chờ xếp xe)', 'CX', '', 0, '', ?, ?)`
+      ).bind(VIRTUAL_XE_ID, now, now).run();
+      await db.prepare(
+        `INSERT OR IGNORE INTO hang (id, ten, nuoc, dia_chi, created_at, updated_at)
+         VALUES ('H-NONE', '(không hãng)', '', '', ?, ?)`
+      ).bind(now, now).run();
+      hangNameToId.set('(không hãng)', 'H-NONE');
+    }
+
     for (const ch of body.newChuyens || []) {
       const xeKey = (ch.so_xe || '').trim().toLowerCase().replace(/\s+/g, ' ');
       const xeId = ch.xe_id || (xeKey ? xeKeyToId.get(xeKey) : '') || '';
       if (!xeId || !ch.tuyen_id) continue;
       await db.prepare(
         `INSERT OR IGNORE INTO chuyen_xe (id, tuyen_id, xe_id, tai_xe_id, ngay_di, ngay_den, trang_thai, ghi_chu, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'planned', '', ?, ?)`
-      ).bind(ch.id, ch.tuyen_id, xeId, ch.tai_xe_id || '', ch.ngay_di, ch.ngay_den || ch.ngay_di, now, now).run();
+         VALUES (?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?)`
+      ).bind(ch.id, ch.tuyen_id, xeId, ch.tai_xe_id || null, ch.ngay_di, ch.ngay_den || ch.ngay_di, ch.xe_id === VIRTUAL_XE_ID ? 'cho-xep-xe' : '', now, now).run();
     }
 
     for (const p of body.valid as PhieuDraft[]) {
@@ -1857,13 +2293,25 @@ loHangRoutes.post('/api/import/confirm', async (c) => {
       let hangId = p.hang_id;
       if (p._khTen) khId = khNameToId.get(p._khTen.trim().toLowerCase().replace(/\s+/g, ' ')) || khId;
       if (p._hangTen) hangId = hangNameToId.get(p._hangTen.trim().toLowerCase().replace(/\s+/g, ' ')) || hangId;
-      if (!khId || !hangId) {
+      // Pure transport receipt (no supplier) -> point to empty supplier H-NONE
+      if (!hangId) {
+        hangId = hangNameToId.get('(không hãng)') || 'H-NONE';
+        await db.prepare(
+          `INSERT OR IGNORE INTO hang (id, ten, nuoc, dia_chi, created_at, updated_at)
+           VALUES ('H-NONE', '(không hãng)', '', '', ?, ?)`
+        ).bind(now, now).run();
+        hangNameToId.set('(không hãng)', 'H-NONE');
+      }
+      if (!khId) {
         skipped++;
         continue;
       }
 
       let loId: string;
-      if (p.chuyen_xe_id) {
+      if (p._loId) {
+        // Pre-assigned receipt ID (awaiting-vehicle trip): F260526-CX-003
+        loId = p._loId;
+      } else if (p.chuyen_xe_id) {
         const last = await db.prepare(
           'SELECT id FROM lo_hang WHERE chuyen_xe_id = ? ORDER BY id DESC LIMIT 1'
         ).bind(p.chuyen_xe_id).first<{ id: string }>();

@@ -116,6 +116,23 @@ congCuRoutes.get('/', async (c) => {
 
       <div class="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
         <div class="flex items-center gap-3 mb-3">
+          <div class="text-3xl">📊</div>
+          <div>
+            <div class="font-semibold text-blue-600">Export Excel mẫu</div>
+            <div class="text-xs text-gray-400">Tải báo cáo dạng CSV (mở bằng Excel)</div>
+          </div>
+        </div>
+        <div class="flex flex-col gap-2 mt-3">
+          <a href="/cong-cu/api/export/chuyen" class="text-sm text-blue-600 hover:underline">🚛 Danh sách chuyến xe</a>
+          <a href="/cong-cu/api/export/cong-no" class="text-sm text-blue-600 hover:underline">💰 Công nợ khách hàng</a>
+          <a href="/cong-cu/api/export/luong" class="text-sm text-blue-600 hover:underline">👥 Bảng lương nhân viên</a>
+          <a href="/cong-cu/api/export/thu-chi" class="text-sm text-blue-600 hover:underline">📒 Sổ thu chi</a>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">File CSV UTF-8 — mở bằng Excel: Data › From Text/CSV để giữ tiếng Việt.</p>
+      </div>
+
+      <div class="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
+        <div class="flex items-center gap-3 mb-3">
           <div class="text-3xl">🚚</div>
           <div>
             <div class="font-semibold text-blue-600">Hướng dẫn lái xe</div>
@@ -162,4 +179,84 @@ congCuRoutes.get('/', async (c) => {
   `;
 
   return c.html(layout('Công cụ', content, user, 'cong-cu'));
+});
+
+// ─── Export sample CSV ───────────────────────────────────────────
+function csvCell(v: unknown): string {
+  const s = v == null ? '' : String(v);
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+function csvResponse(filename: string, rows: string[][]): Response {
+  const body = '\uFEFF' + rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  });
+}
+
+congCuRoutes.get('/api/export/chuyen', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT cx.id, t.ten AS tuyen, x.so_xe, x.bien_so, tx.ten AS tai_xe,
+            cx.ngay_di, cx.ngay_den, cx.gia_chuyen, cx.tien_te, cx.trang_thai, cx.da_thanh_toan
+     FROM chuyen_xe cx
+     LEFT JOIN tuyen t ON cx.tuyen_id=t.id
+     LEFT JOIN xe x ON cx.xe_id=x.id
+     LEFT JOIN nhan_vien tx ON cx.tai_xe_id=tx.id
+     ORDER BY cx.ngay_di DESC`
+  ).all<Record<string, unknown>>();
+  const rows: string[][] = [['Mã chuyến', 'Tuyến', 'Số xe', 'Biển số', 'Tài xế', 'Ngày đi', 'Ngày về', 'Giá chuyến', 'Tiền tệ', 'Trạng thái', 'Đã TT']];
+  for (const r of results) {
+    rows.push([r.id, r.tuyen, r.so_xe, r.bien_so, r.tai_xe, r.ngay_di, r.ngay_den, r.gia_chuyen, r.tien_te, r.trang_thai, r.da_thanh_toan ? 'Rồi' : 'Chưa'].map((x) => String(x ?? '')));
+  }
+  return csvResponse('chuyen_xe.csv', rows);
+});
+
+congCuRoutes.get('/api/export/cong-no', async (c) => {
+  const { results: khList } = await c.env.DB.prepare('SELECT id, ma_kh, ten, sdt, han_tt FROM khach_hang ORDER BY ten').all<Record<string, unknown>>();
+  // Compute per-customer debt from lot + receipt data (concatenate all currency amounts into one string)
+  const { results: lots } = await c.env.DB.prepare(
+    `SELECT lh.khach_hang_id, lh.thanh_tien, lh.giam_gia, lh.tien_te, lh.so_tien_hang, lh.tien_te_th
+     FROM lo_hang lh`
+  ).all<Record<string, unknown>>();
+  const { results: thu } = await c.env.DB.prepare('SELECT khach_hang_id, so_tien, tien_te FROM phieu_thu').all<Record<string, unknown>>();
+  const noByKh = new Map<string, Record<string, number>>();
+  const add = (kh: string, tte: string, v: number) => {
+    if (!v) return;
+    if (!noByKh.has(kh)) noByKh.set(kh, {});
+    const m = noByKh.get(kh)!; m[tte] = (m[tte] || 0) + v;
+  };
+  for (const l of lots) {
+    add(String(l.khach_hang_id), String(l.tien_te || 'PLN'), Number(l.thanh_tien) - Number(l.giam_gia || 0));
+    if (Number(l.so_tien_hang || 0) > 0) add(String(l.khach_hang_id), String(l.tien_te_th || l.tien_te || 'PLN'), Number(l.so_tien_hang));
+  }
+  for (const t of thu) add(String(t.khach_hang_id), String(t.tien_te || 'PLN'), -Number(t.so_tien || 0));
+  const rows: string[][] = [['Mã KH', 'Tên', 'SĐT', 'Hạn TT (ngày)', 'Còn nợ']];
+  for (const kh of khList) {
+    const m = noByKh.get(String(kh.id)) || {};
+    const noStr = Object.entries(m).filter(([, v]) => Math.abs(v) > 0.5).map(([t, v]) => `${Math.round(v).toLocaleString('vi-VN')} ${t}`).join(' · ') || '0';
+    rows.push([String(kh.ma_kh ?? ''), String(kh.ten ?? ''), String(kh.sdt ?? ''), String(kh.han_tt ?? 30), noStr]);
+  }
+  return csvResponse('cong_no_khach.csv', rows);
+});
+
+congCuRoutes.get('/api/export/luong', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT nv.id, nv.ten, nv.vai_tro, nv.sdt,
+            (SELECT COUNT(*) FROM cham_cong cc WHERE cc.nhan_vien_id=nv.id AND cc.trang_thai='co_mat') AS ngay_cong
+     FROM nhan_vien nv WHERE nv.active=1 ORDER BY nv.ten`
+  ).all<Record<string, unknown>>();
+  const rows: string[][] = [['Mã NV', 'Tên', 'Vai trò', 'SĐT', 'Số ngày công']];
+  for (const r of results) rows.push([r.id, r.ten, r.vai_tro, r.sdt, r.ngay_cong].map((x) => String(x ?? '')));
+  return csvResponse('bang_luong.csv', rows);
+});
+
+congCuRoutes.get('/api/export/thu-chi', async (c) => {
+  const { results: thu } = await c.env.DB.prepare('SELECT ngay, khach_hang_id, dau_muc, so_tien, tien_te, hinh_thuc, ghi_chu FROM phieu_thu ORDER BY ngay').all<Record<string, unknown>>();
+  const { results: chi } = await c.env.DB.prepare('SELECT ngay, dau_muc, so_tien, tien_te, hinh_thuc, ghi_chu FROM phieu_chi ORDER BY ngay').all<Record<string, unknown>>();
+  const rows: string[][] = [['Loại', 'Ngày', 'Đầu mục', 'Số tiền', 'Tiền tệ', 'Hình thức', 'Ghi chú']];
+  for (const r of thu) rows.push(['THU', String(r.ngay ?? ''), String(r.dau_muc ?? ''), String(r.so_tien ?? 0), String(r.tien_te ?? ''), String(r.hinh_thuc ?? ''), String(r.ghi_chu ?? '')]);
+  for (const r of chi) rows.push(['CHI', String(r.ngay ?? ''), String(r.dau_muc ?? ''), String(r.so_tien ?? 0), String(r.tien_te ?? ''), String(r.hinh_thuc ?? ''), String(r.ghi_chu ?? '')]);
+  return csvResponse('so_thu_chi.csv', rows);
 });

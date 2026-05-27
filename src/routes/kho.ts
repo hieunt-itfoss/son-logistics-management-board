@@ -144,7 +144,7 @@ khoRoutes.get('/', async (c) => {
       subtitle: `Tổng <strong class="text-primary text-lg">${totalKien}</strong> kiện · ${lots.length} phiếu · Tiền lưu kho dự kiến: <strong class="text-warning">${fmtNum(tongTienKho)} PLN</strong>`,
     })}
 
-    <!-- Sort + Đơn giá toolbar -->
+    <!-- Sort + unit price toolbar -->
     ${card({
       body: `<form method="get" action="/kho" class="flex flex-wrap items-center gap-3">
         <span class="text-xs font-semibold text-warning uppercase flex items-center gap-1">
