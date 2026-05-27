@@ -13,7 +13,7 @@ export function addCcy(target: CcyMap, tte: string, amount: number): void {
   target[tte] = (target[tte] || 0) + amount;
 }
 
-/** Customer receivables (VT + tiền hàng) — same rules as doi-tac list */
+/** Customer receivables (transport + merchandise) — same rules as doi-tac list */
 export async function computeReceivables(db: D1Database): Promise<{
   totalByCcy: CcyMap;
   topDebtors: { id: string; ten: string; ma_kh: string; con_no: CcyMap; qua_han: number }[];
@@ -130,7 +130,7 @@ export async function computeReceivables(db: D1Database): Promise<{
   return { totalByCcy, topDebtors: topDebtors.slice(0, 10), overdueCount };
 }
 
-/** Tồn quỹ = số dư đầu kỳ + tổng thu − tổng chi (theo từng loại tiền) */
+/** Cash balance = opening balance + total receipts − total expenses (per currency) */
 export async function computeFundBalance(db: D1Database): Promise<{
   byCcy: Record<string, { opening: number; thu: number; chi: number; balance: number }>;
 }> {
@@ -169,7 +169,7 @@ export async function computeFundBalance(db: D1Database): Promise<{
   return { byCcy };
 }
 
-/** Công nợ phải trả cty vận tải (chuyến chưa thanh toán) */
+/** Payables to carrier companies (unpaid trips) */
 export async function computePayablesVT(db: D1Database): Promise<CcyMap> {
   const { results } = await db.prepare(
     `SELECT cx.tien_te, SUM(cx.gia_chuyen) as total

@@ -237,7 +237,7 @@ doiTacRoutes.get('/', async (c) => {
       });
     }
 
-    // ── Hãng Modal ──
+    // ── Supplier (hang) Modal ──
     function openHangModal(id) {
       const m = document.getElementById('hangModal');
       if (id) {
@@ -524,7 +524,20 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
       ? '0'
       : Object.entries(tongAll).map(([t, v]) => `<strong>${fmtNum(v)} ${t}</strong>`).join('<br>');
 
+    // Data to build reconciliation text on the client (bulk copy/print/Viber)
+    const dsData = {
+      ten: kh.ten,
+      ma: kh.ma_kh,
+      sdt: kh.sdt || '',
+      noVT,
+      noTH,
+      phiKho,
+      tong: tongAll,
+    };
+    const dsAttr = esc(JSON.stringify(dsData));
+
     return tableRow([
+      `<input type="checkbox" class="kh-check rounded border-bordergray" value="${kh.id}" data-ds="${dsAttr}">`,
       `<span class="font-mono font-medium">${esc(kh.ma_kh)}</span>`,
       `<a href="/doi-tac/khach-hang/${kh.id}" class="text-primary hover:underline font-medium">${esc(kh.ten)}</a>`,
       dgBadge(dg),
@@ -565,14 +578,14 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
       <div class="overflow-x-auto">
         <table class="htql-table min-w-full w-full text-sm">
           <thead><tr class="border-b border-light-dark">
-            ${th('Mã')}${th('Tên')}${th('Đánh giá')}${th('Cảnh báo')}${th('NIP')}${th('Tiền tệ')}
+            ${th('<input type="checkbox" id="khSelectAll" class="rounded border-bordergray" title="Chọn tất cả">')}${th('Mã')}${th('Tên')}${th('Đánh giá')}${th('Cảnh báo')}${th('NIP')}${th('Tiền tệ')}
             ${th('Hạn', { align: 'right' })}${th('Đơn giá', { align: 'right' })}${th('Tồn', { align: 'right' })}
             ${th('Nợ VT', { align: 'right' })}${th('Nợ TH', { align: 'right' })}${th('Phí kho', { align: 'right' })}
             ${th('Tổng nợ', { align: 'right' })}${th('')}
           </tr></thead>
           <tbody class="divide-y divide-border dark:divide-darkborder">${rows}
             <tr class="bg-lightwarning font-semibold border-t-2 border-warning/30">
-              <td colspan="9" class="text-right py-3">Tổng ${sorted.length} khách</td>
+              <td colspan="10" class="text-right py-3">Tổng ${sorted.length} khách</td>
               <td class="text-right">${fmtTotM(tongAllNoVT)}</td>
               <td class="text-right">${fmtTotM(tongAllNoTH)}</td>
               <td class="text-right">${tongAllPhiKho > 0 ? fmtNum(tongAllPhiKho) + ' PLN' : '—'}</td>
@@ -582,10 +595,69 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
           </tbody>
         </table>
       </div>
-    </div>`;
+    </div>
+
+    <div id="khBulkBar" class="hidden fixed bottom-0 left-0 right-0 bg-primary text-white px-6 py-3 flex items-center gap-3 z-50 shadow-lg">
+      <span id="khBulkCount" class="font-semibold">0 khách đã chọn:</span>
+      <button onclick="khBulkDoiSoat('copy')" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30">📋 Copy đối soát</button>
+      <button onclick="khBulkDoiSoat('print')" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30">🖨 In đồng loạt</button>
+      <button onclick="khBulkViber()" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30">📱 Mở Viber</button>
+      <button onclick="khClearSel()" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30 ml-auto">✕ Bỏ chọn</button>
+    </div>
+
+    <script>
+    (function(){
+      function selected(){ return Array.from(document.querySelectorAll('.kh-check:checked')); }
+      function fmtM(m){ var e=Object.entries(m||{}).filter(function(x){return Math.abs(x[1])>0.001;}); return e.length? e.map(function(x){return Math.round(x[1]).toLocaleString('vi-VN')+' '+x[0];}).join(' · '):'0'; }
+      function dsText(d){
+        var L=[];
+        L.push('ĐỐI SOÁT CÔNG NỢ');
+        L.push('Khách: '+d.ten+(d.ma?' ('+d.ma+')':''));
+        if(Object.keys(d.noVT||{}).length) L.push('- Nợ vận tải: '+fmtM(d.noVT));
+        if(Object.keys(d.noTH||{}).length) L.push('- Nợ tiền hàng: '+fmtM(d.noTH));
+        if(d.phiKho>0) L.push('- Phí lưu kho: '+Math.round(d.phiKho).toLocaleString('vi-VN')+' PLN');
+        L.push('=> TỔNG: '+fmtM(d.tong));
+        return L.join('\\n');
+      }
+      function updateBar(){
+        var s=selected(), bar=document.getElementById('khBulkBar'), cnt=document.getElementById('khBulkCount');
+        if(s.length){ bar.classList.remove('hidden'); cnt.textContent=s.length+' khách đã chọn:'; }
+        else bar.classList.add('hidden');
+      }
+      document.getElementById('khSelectAll')?.addEventListener('change',function(){
+        document.querySelectorAll('.kh-check').forEach(function(cb){cb.checked=this.checked;}.bind(this)); updateBar();
+      });
+      document.querySelectorAll('.kh-check').forEach(function(cb){ cb.addEventListener('change',updateBar); });
+      window.khClearSel=function(){ document.querySelectorAll('.kh-check').forEach(function(cb){cb.checked=false;}); var sa=document.getElementById('khSelectAll'); if(sa)sa.checked=false; updateBar(); };
+      window.khBulkDoiSoat=function(mode){
+        var s=selected(); if(!s.length)return;
+        var blocks=s.map(function(cb){ return dsText(JSON.parse(cb.dataset.ds)); });
+        var all=blocks.join('\\n\\n──────────\\n\\n');
+        if(mode==='copy'){
+          navigator.clipboard.writeText(all).then(function(){ alert('Đã copy đối soát '+s.length+' khách'); },function(){ prompt('Copy thủ công:',all); });
+        } else {
+          var w=window.open('','_blank');
+          w.document.write('<pre style="font:14px/1.5 monospace;padding:20px;white-space:pre-wrap">'+all.replace(/</g,'&lt;')+'</pre>');
+          w.document.close(); w.focus(); w.print();
+        }
+      };
+      window.khBulkViber=function(){
+        var s=selected(); if(!s.length)return;
+        s.forEach(function(cb){
+          var d=JSON.parse(cb.dataset.ds);
+          if(!d.sdt){ return; }
+          var sdt=String(d.sdt).replace(/[^0-9+]/g,'');
+          window.open('viber://chat?number='+encodeURIComponent(sdt),'_blank');
+        });
+        var noSdt=s.filter(function(cb){return !JSON.parse(cb.dataset.ds).sdt;}).length;
+        if(noSdt) alert(noSdt+' khách chưa có SĐT, đã bỏ qua.');
+      };
+    })();
+    </script>`;
 }
 
-// ── Render Hãng List ────────────────────────────────────────────
+
+// ── Render supplier (hang) list ────────────────────────────────────
 
 async function renderHangList(db: D1Database, sort: string, search: string): Promise<string> {
   const { results: hangList } = await db.prepare(
@@ -919,7 +991,7 @@ doiTacRoutes.get('/khach-hang/:id', async (c) => {
       </div>
     </div>
 
-    <!-- Công nợ chi tiết by đầu mục -->
+    <!-- Receivables detail by category -->
     <div class="bg-white rounded-xl border border-gray-200 mb-6 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 font-semibold text-gray-800">⚖ Bóc tách công nợ theo đầu mục + mệnh giá</div>
       ${cnList.length === 0
@@ -948,7 +1020,7 @@ doiTacRoutes.get('/khach-hang/:id', async (c) => {
       }
     </div>
 
-    <!-- Phiếu hàng -->
+    <!-- Receipts (lots) -->
     <div class="bg-white rounded-xl border border-gray-200 mb-6 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 font-semibold text-gray-800">📦 Phiếu hàng (${lots.length})</div>
       ${lots.length === 0
@@ -979,7 +1051,7 @@ doiTacRoutes.get('/khach-hang/:id', async (c) => {
       }
     </div>
 
-    <!-- Phiếu thu gần nhất -->
+    <!-- Recent receipt slips -->
     <div class="bg-white rounded-xl border border-gray-200 mb-6 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 font-semibold text-gray-800">💰 Phiếu thu gần nhất (${phieuThus.length})</div>
       ${phieuThus.length === 0
@@ -1018,7 +1090,7 @@ doiTacRoutes.get('/khach-hang/:id', async (c) => {
   return c.html(layout(`Đối tác — ${kh.ten}`, content, user, 'doi-tac'));
 });
 
-// ── GET /hang/:id — Hãng Detail ─────────────────────────────────
+// ── GET /hang/:id — Supplier detail ─────────────────────────────────
 
 doiTacRoutes.get('/hang/:id', async (c) => {
   const user = c.get('user');
@@ -1087,7 +1159,7 @@ doiTacRoutes.get('/hang/:id', async (c) => {
       </div>
     </div>
 
-    <!-- Phiếu hàng -->
+    <!-- Receipts (lots) -->
     <div class="bg-white rounded-xl border border-gray-200 mb-6 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 font-semibold text-gray-800">📦 Danh sách phiếu (${lots.length})</div>
       ${lots.length === 0
@@ -1146,7 +1218,7 @@ doiTacRoutes.get('/cty-vt/:id', async (c) => {
     chuyens = chResults;
   }
 
-  // Công nợ
+  // Receivables
   const cnByTte: Record<string, { phai_tra: number; da_tra: number; con_no: number }> = {};
   for (const ch of chuyens) {
     const tte = String(ch.tien_te || 'PLN');
@@ -1234,7 +1306,7 @@ doiTacRoutes.get('/cty-vt/:id', async (c) => {
         </tbody></table></div>
     </div>` : ''}
 
-    <!-- Chuyến gần đây -->
+    <!-- Recent trips -->
     <div class="bg-white rounded-xl border border-gray-200 mb-6 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 font-semibold text-gray-800">📅 Chuyến gần đây (${chuyens.length})</div>
       ${chuyens.length === 0
@@ -1276,7 +1348,7 @@ doiTacRoutes.get('/api/khach-hang/:id', async (c) => {
   return c.json(kh);
 });
 
-// ── GET /api/hang/:id — Hãng JSON ───────────────────────────────
+// ── GET /api/hang/:id — Supplier JSON ───────────────────────────────
 
 doiTacRoutes.get('/api/hang/:id', async (c) => {
   const id = c.req.param('id');
@@ -1328,7 +1400,7 @@ doiTacRoutes.post('/api/khach-hang', async (c) => {
   return c.redirect('/doi-tac?sub=khach');
 });
 
-// ── POST /api/hang — Create/Update Hãng ─────────────────────────
+// ── POST /api/hang — Create/Update supplier ─────────────────────────
 
 doiTacRoutes.post('/api/hang', async (c) => {
   const body = await c.req.parseBody();

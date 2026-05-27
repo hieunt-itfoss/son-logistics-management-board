@@ -14,7 +14,7 @@ INSERT OR IGNORE INTO users (id, username, password_hash, display_name, role, ac
 -- Safe to run repeatedly: only affects these seed accounts.
 UPDATE users SET password_hash = 'admin123' WHERE id IN ('USR-001','USR-002','USR-003','USR-004','USR-005','USR-006');
 
--- Nhan vien (unified staff, replaces tai_xe)
+-- Staff (unified staff, replaces tai_xe)
 INSERT OR IGNORE INTO nhan_vien (id, ten, vai_tro, sdt, so_giay_to, dia_chi) VALUES
   ('NV-001', 'Nam', 'laixe', '+48 700 111 111', 'PESEL 88051512345', 'Warszawa'),
   ('NV-002', 'Tuấn', 'laixe', '+48 700 222 222', 'PESEL 87031554321', 'Warszawa'),
@@ -32,7 +32,7 @@ INSERT OR IGNORE INTO nhan_vien (id, ten, vai_tro, sdt, so_giay_to, dia_chi) VAL
   ('NV-014', 'Tâm', 'laixe', '+48 701 014 014', 'PESEL 88091587654', 'Kraków'),
   ('NV-015', 'Quang', 'nhanvien', '+48 701 015 015', 'PESEL 92031234567', 'Warszawa');
 
--- Cty van tai (carriers)
+-- Carriers
 INSERT OR IGNORE INTO cty_van_tai (id, ten, dia_chi, sdt) VALUES
   ('CV-001', 'TransPol', 'Warszawa', '+48 22 111 1111'),
   ('CV-002', 'EuroLogistics', 'Łódź', '+48 42 222 2222'),
@@ -42,7 +42,7 @@ INSERT OR IGNORE INTO cty_van_tai (id, ten, dia_chi, sdt) VALUES
   ('CV-006', 'WestExpress', 'Poznań', '+48 61 666 6666'),
   ('CV-007', 'CarpathianLog', 'Kraków', '+48 12 777 7777');
 
--- Khach hang
+-- Customers
 INSERT OR IGNORE INTO khach_hang (id, ma_kh, ten, nip, dia_chi, sdt, han_tt, ghi_chu, danh_gia) VALUES
   ('KH-001', '001', 'A ĐỨC BÉO', 'PL5210123456', 'Warszawa', '+48 600 111 222', 30, '', ''),
   ('KH-002', '002', 'A HUI', 'PL5210234567', 'Wólka', '+48 600 222 333', 30, '', ''),
@@ -60,7 +60,7 @@ INSERT OR IGNORE INTO khach_hang (id, ma_kh, ten, nip, dia_chi, sdt, han_tt, ghi
   ('KH-014', '014', 'A LONG', 'PL5211400009', 'Wólka', '+48 602 100 009', 21, '', ''),
   ('KH-015', '015', 'C MAI', 'PL5211500010', 'Gdańsk', '+48 602 100 010', 30, 'KH mới ký HĐ', '');
 
--- Hang
+-- Suppliers
 INSERT OR IGNORE INTO hang (id, ten, nuoc, dia_chi) VALUES
   ('H-001', 'JM', 'Ý', 'Milano'),
   ('H-002', 'ENVIPLUS', 'Ý', 'Roma'),
@@ -73,7 +73,7 @@ INSERT OR IGNORE INTO hang (id, ten, nuoc, dia_chi) VALUES
   ('H-009', 'Skoda Parts', 'Tiệp', 'Mladá Boleslav'),
   ('H-010', 'BergamoTech', 'Ý', 'Bergamo');
 
--- Tuyen (with mau and dau_muc_group)
+-- Routes (with mau and dau_muc_group)
 INSERT OR IGNORE INTO tuyen (id, ten, mau, dau_muc_group, tien_to, diem_di, diem_den, khoang_cach_km) VALUES
   ('T-001', 'Paris-Wólka', 'blue', 'phap', 'F', 'Paris', 'Warszawa', 1500),
   ('T-002', 'Lyon-Wólka', 'blue', 'phap', 'F', 'Lyon', 'Warszawa', 1600),
@@ -97,7 +97,7 @@ INSERT OR IGNORE INTO xe (id, bien_so, so_xe, loai_xe, trong_tai, tai_xe_id, cty
   ('XE-53', 'GD 44444H', 'XE 53', 'Tải vừa', 20000, 'NV-001', 'CV-006'),
   ('XE-54', 'WR 55555I', 'XE 54', 'Tải nhỏ', 12000, 'NV-003', 'CV-007');
 
--- Bang gia
+-- Pricing
 INSERT OR IGNORE INTO bang_gia (id, khach_hang_id, don_gia, tien_te) VALUES
   ('BG-001', 'KH-001', 100, 'PLN'), ('BG-002', 'KH-002', 80, 'PLN'),
   ('BG-003', 'KH-003', 100, 'PLN'), ('BG-004', 'KH-004', 80, 'PLN'),
@@ -108,7 +108,7 @@ INSERT OR IGNORE INTO bang_gia (id, khach_hang_id, don_gia, tien_te) VALUES
   ('BG-013', 'KH-013', 95, 'PLN'),  ('BG-014', 'KH-014', 100, 'PLN'),
   ('BG-015', 'KH-015', 90, 'PLN');
 
--- Chuyen xe (with new columns)
+-- Trips (with new columns)
 INSERT OR IGNORE INTO chuyen_xe (id, tuyen_id, xe_id, tai_xe_id, ngay_di, ngay_den, gia_chuyen, tien_te, da_thanh_toan, ngay_thanh_toan, so_sent_va_gt, trang_thai) VALUES
   ('F260526-50', 'T-001', 'XE-50', 'NV-002', '2026-05-25', '2026-05-26', 4500, 'PLN', 0, '', 'SENT2026/0002 · CMR-FR-002', 'hoan_thanh'),
   ('W260526-47', 'T-003', 'XE-47', 'NV-001', '2026-05-24', '2026-05-26', 5000, 'PLN', 0, '', 'SENT2026/0001 · CMR-IT-001', 'hoan_thanh'),
@@ -131,7 +131,7 @@ INSERT OR IGNORE INTO chuyen_xe (id, tuyen_id, xe_id, tai_xe_id, ngay_di, ngay_d
   ('K260521-49', 'T-008', 'XE-49', 'NV-010', '2026-05-19', '2026-05-21', 4200, 'EUR', 0, '', 'SENT2026/0018 · Berlin', 'hoan_thanh'),
   ('K260520-52', 'T-009', 'XE-52', 'NV-014', '2026-05-17', '2026-05-20', 6500, 'EUR', 0, '', 'SENT2026/0019 · Madrid', 'hoan_thanh');
 
--- Lo hang (matching original sample data)
+-- Lots/receipts (matching original sample data)
 INSERT OR IGNORE INTO lo_hang (id, chuyen_xe_id, khach_hang_id, hang_id, so_kien, da_tra_hang, don_gia, tien_te, thanh_tien, so_tien_hang, giam_gia, nguoi_tao, nguoi_thu) VALUES
   ('F260526-50-001', 'F260526-50', 'KH-001', 'H-003', 240, 240, 100, 'PLN', 24000, 0, 0, 'NV-005', 'NV-005'),
   ('F260526-50-002', 'F260526-50', 'KH-002', 'H-003', 128, 128, 85, 'EUR', 10880, 5000, 0, 'NV-005', 'NV-005'),
@@ -170,7 +170,7 @@ INSERT OR IGNORE INTO lo_hang (id, chuyen_xe_id, khach_hang_id, hang_id, so_kien
   ('K260521-49-001', 'K260521-49', 'KH-010', 'H-007', 180, 180, 80, 'EUR', 14400, 0, 0, 'NV-005', 'NV-005'),
   ('K260520-52-001', 'K260520-52', 'KH-010', 'H-008', 90, 90, 80, 'EUR', 7200, 5000, 0, 'NV-005', 'NV-005');
 
--- Phieu thu
+-- Receipt slips (income)
 INSERT OR IGNORE INTO phieu_thu (id, ngay, khach_hang_id, dau_muc, kieu_qt, loai_tien, lo_ids, so_tien, tien_te, hinh_thuc, ghi_chu, nguoi_nhap, gio) VALUES
   ('PT-001', '2026-05-26', 'KH-001', 'Vận tải Ý', 'trahet', 'vantai', '["W260526-47-001"]', 18000, 'PLN', 'CK', '', 'NV-005', '08:30'),
   ('PT-002', '2026-05-26', 'KH-003', 'Vận tải Ý', 'trahet', 'vantai', '["W260522-46-001"]', 11100, 'PLN', 'TM', 'Trả phiếu W-003-0001', 'NV-005', '09:15'),
@@ -188,7 +188,7 @@ INSERT OR IGNORE INTO phieu_thu (id, ngay, khach_hang_id, dau_muc, kieu_qt, loai
   ('PT-027', '2026-05-26', 'KH-007', 'Vận tải Pháp', 'trahet', 'vantai', '["F260523-53-001"]', 19000, 'PLN', 'CK', 'Trả hết Pháp', 'NV-005', '10:00'),
   ('PT-031', '2026-05-26', 'KH-010', 'Vận tải khác', 'trahet', 'vantai', '["K260521-49-001"]', 14400, 'EUR', 'CK', 'Trả VT Berlin', 'NV-005', '12:00');
 
--- Phieu chi
+-- Expense slips
 INSERT OR IGNORE INTO phieu_chi (id, ngay, dau_muc, chuyen_xe_id, lo_ids, kieu_qt, so_tien, tien_te, hinh_thuc, ghi_chu, nguoi_nhap, gio, phai_thu_ve) VALUES
   ('PC-001', '2026-05-25', 'Vận tải Pháp', 'F260524-50', '[]', 'trahet', 4500, 'PLN', 'CK', 'Trả TransPol F-240526-50', 'NV-007', '11:00', 1),
   ('PC-002', '2026-05-26', 'Vận tải Pháp', '', '[]', 'trahet', 250, 'PLN', 'TM', 'Xăng XE 47', 'NV-003', '10:20', 1),
@@ -198,7 +198,7 @@ INSERT OR IGNORE INTO phieu_chi (id, ngay, dau_muc, chuyen_xe_id, lo_ids, kieu_q
   ('PC-012', '2026-05-26', 'Vận tải Pháp', '', '[]', 'trahet', 380, 'EUR', 'TM', 'Phí cầu đường Pháp (EUR)', 'NV-002', '12:00', 1),
   ('PC-020', '2026-05-26', 'Vận tải khác', 'K260521-49', '[]', 'trahet', 4200, 'EUR', 'CK', 'Trả CV Berlin (EUR)', 'NV-007', '13:00', 1);
 
--- So du dau ky (opening balances)
+-- Opening balances
 INSERT OR IGNORE INTO so_du_dau_ky (id, tien_te, so_du, ngay_ap_dung) VALUES
   ('SD-001', 'PLN', 25000, '2026-05-01'),
   ('SD-002', 'EUR', 8500, '2026-05-01'),

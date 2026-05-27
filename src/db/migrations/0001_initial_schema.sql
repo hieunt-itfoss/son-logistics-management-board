@@ -1,5 +1,5 @@
 -- Migration: 001_initial_schema
--- He thong quan ly van tai - Transport Management System
+-- Transport Management System (HTQLVT)
 
 -- Users table (authentication & authorization)
 CREATE TABLE IF NOT EXISTS users (
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 
--- Khach hang (Customers)
+-- Customers
 CREATE TABLE IF NOT EXISTS khach_hang (
   id TEXT PRIMARY KEY,
   ma_kh TEXT NOT NULL UNIQUE,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS khach_hang (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Hang (Suppliers)
+-- Suppliers
 CREATE TABLE IF NOT EXISTS hang (
   id TEXT PRIMARY KEY,
   ten TEXT NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS hang (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Tuyen (Routes)
+-- Routes
 CREATE TABLE IF NOT EXISTS tuyen (
   id TEXT PRIMARY KEY,
   ten TEXT NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS tuyen (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Xe (Vehicles)
+-- Vehicles
 CREATE TABLE IF NOT EXISTS xe (
   id TEXT PRIMARY KEY,
   bien_so TEXT NOT NULL UNIQUE,
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS xe (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Tai xe (Drivers)
+-- Drivers
 CREATE TABLE IF NOT EXISTS tai_xe (
   id TEXT PRIMARY KEY,
   ten TEXT NOT NULL,
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS tai_xe (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Chuyen xe (Trips)
+-- Trips
 CREATE TABLE IF NOT EXISTS chuyen_xe (
   id TEXT PRIMARY KEY,
   tuyen_id TEXT NOT NULL REFERENCES tuyen(id),

@@ -10,6 +10,8 @@
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "db:seed": "wrangler d1 execute DB --local --file=src/db/seed.sql",
+    "db:seed:htqlvt": "wrangler d1 execute DB --local --file=src/db/seed_htqlvt_sample.sql",
+    "db:seed:htqlvt:remote": "wrangler d1 execute DB --remote --file=src/db/seed_htqlvt_sample.sql",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
