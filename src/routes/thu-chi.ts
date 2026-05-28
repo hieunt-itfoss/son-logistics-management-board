@@ -525,7 +525,7 @@ thuChiRoutes.get('/', async (c) => {
           <option value="thisMonth" ${range==='thisMonth'?'selected':''}>Tháng này</option>
           <option value="all" ${range==='all'?'selected':''}>Tất cả thời gian</option>
         </select>
-        ${searchField({ value: esc(q), placeholder: 'Tìm mã / lý do...' })}
+        ${searchField({ value: esc(q), placeholder: 'Tìm mã / lý do...', auto: true })}
         ${btnPrimary('Lọc', { type: 'submit' })}
         ${hasFilter ? '<a href="/thu-chi" class="text-error text-sm hover:underline">Xóa lọc</a>' : ''}
       </form>`,
@@ -594,7 +594,8 @@ thuChiRoutes.get('/thu/create', async (c) => {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label class="block text-sm font-medium text-dark dark:text-white mb-1">Khách hàng <span class="text-error">*</span></label>
-            <select name="khach_hang_id" id="selKh" required class="form-control w-full">
+            <input type="text" id="selKhSearch" placeholder="Gõ để tìm tên khách..." autocomplete="off" class="form-control w-full mb-1">
+            <select name="khach_hang_id" id="selKh" required class="form-control w-full" size="6">
               <option value="">— Chọn KH —</option>
               ${khOpts}
             </select>
@@ -664,6 +665,26 @@ thuChiRoutes.get('/thu/create', async (c) => {
     </div>
 
     <script>
+    // Lọc danh sách khách theo từ khoá (không phân biệt dấu)
+    (function(){
+      function kd(s){return (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/ł/g,'l').replace(/Ł/g,'L').toLowerCase();}
+      var inp = document.getElementById('selKhSearch');
+      var sel = document.getElementById('selKh');
+      if (inp && sel) {
+        var opts = Array.prototype.slice.call(sel.options).map(function(o){return {el:o, t:kd(o.textContent)};});
+        inp.addEventListener('input', function(){
+          var n = kd(this.value);
+          var firstMatch = null;
+          opts.forEach(function(o){
+            if (o.el.value === '') { o.el.hidden = false; return; }
+            var hit = o.t.indexOf(n) !== -1;
+            o.el.hidden = !hit;
+            if (hit && !firstMatch) firstMatch = o.el;
+          });
+          if (firstMatch && n) { sel.value = firstMatch.value; sel.dispatchEvent(new Event('change')); }
+        });
+      }
+    })();
     const selKh = document.getElementById('selKh');
     selKh.addEventListener('change', async function() {
       const khId = this.value;
