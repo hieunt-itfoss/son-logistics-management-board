@@ -827,6 +827,15 @@ html {
   overflow-x: auto;
 }
 
+/* Compact: hiện đủ cột vừa màn rộng, hạn chế kéo trượt ngang */
+.htql-dt table { table-layout: auto; }
+@media (min-width: 1280px) {
+  .htql-dt-th-inner { padding: 0.4rem 0.45rem; gap: 0.15rem; }
+  .htql-dt tbody td { padding: 0.4rem 0.45rem; }
+  .htql-dt table { font-size: 0.78rem; }
+  .htql-dt thead th { font-size: 0.66rem; letter-spacing: 0.02em; }
+}
+
 .htql-dt table {
   width: 100%;
   min-width: 100%;
