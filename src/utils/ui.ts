@@ -486,14 +486,19 @@ export function searchField(
     value?: string;
     placeholder: string;
     extraInputClass?: string;
+    auto?: boolean;
   },
 ): string {
   const name = opts.name ?? "q";
   const val = opts.value ?? "";
   const ph = opts.placeholder;
   const extra = opts.extraInputClass ? ` ${opts.extraInputClass}` : "";
+  // auto: gõ chữ là tự tìm (debounce 350ms), không cần bấm nút/Enter
+  const autoAttr = opts.auto
+    ? ` oninput="clearTimeout(window.__htqlSearchT);window.__htqlSearchT=setTimeout(()=>this.form.submit(),350)"`
+    : "";
   return `<div class="htql-search">
-    <input type="text" name="${name}" autocomplete="off" value="${val}" placeholder="${ph}" class="htql-search-input${extra}" data-auto-width>
+    <input type="text" name="${name}" autocomplete="off" value="${val}" placeholder="${ph}" class="htql-search-input${extra}" data-auto-width${autoAttr}>
     <button type="submit" class="htql-search-btn" title="Tìm" aria-label="Tìm">
       <iconify-icon icon="solar:magnifer-broken" class="text-lg"></iconify-icon>
     </button>
