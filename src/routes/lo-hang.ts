@@ -23,6 +23,7 @@ import {
   type NewXeDraft,
   type NewChuyenDraft,
 } from '../utils/import-data';
+import { khongDau } from '../utils';
 
 export const loHangRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -277,16 +278,8 @@ loHangRoutes.get('/', async (c) => {
     }
   }
 
-  // Free text search
-  if (freeSearch) {
-    conditions.push(`(
-      lh.id LIKE ? OR kh.ten LIKE ? OR kh.ma_kh LIKE ? OR h.ten LIKE ?
-      OR x.so_xe LIKE ? OR x.bien_so LIKE ? OR t.ten LIKE ?
-      OR lh.ly_do_thieu LIKE ? OR cx.id LIKE ?
-    )`);
-    const like = `%${freeSearch}%`;
-    for (let i = 0; i < 9; i++) params.push(like);
-  }
+  // Free text search: lọc app-side (sau query) để match không phân biệt dấu
+  // (wolka↔WÓLKA, tiep↔Tiệp). Không đưa vào SQL LIKE vì SQLite không bỏ dấu.
 
   const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
   const orderBy = 'ORDER BY cx.ngay_di DESC, lh.id DESC';
@@ -295,7 +288,19 @@ loHangRoutes.get('/', async (c) => {
     `${LO_HANG_SQL} ${whereClause} ${orderBy}`
   ).bind(...params).all<LoRow>();
 
-  const lots = results as LoRow[];
+  let lots = results as LoRow[];
+
+  // Lọc tìm tự do (không dấu)
+  if (freeSearch) {
+    const needle = khongDau(freeSearch);
+    lots = lots.filter(lo => {
+      const hay = khongDau([
+        lo.id, lo.khach_hang_ten, lo.ma_kh, lo.hang_ten,
+        lo.so_xe, lo.bien_so, lo.tuyen_ten, lo.ly_do_thieu, lo.chuyen_xe_id,
+      ].filter(Boolean).join(' '));
+      return hay.includes(needle);
+    });
+  }
 
   // Fetch dropdown data for create form
   const khRes = await c.env.DB.prepare('SELECT id, ten, ma_kh FROM khach_hang ORDER BY ten').all();
@@ -402,6 +407,34 @@ loHangRoutes.get('/', async (c) => {
   // ─── Build HTML ────────────────────────────────────────────
   let html = '<div class="htql-dt" data-htql-dt>';
 
+  // Bulk action bar — dòng trên cùng (mẫu 7zc): nền xanh lá nhạt, ẩn khi chưa chọn
+  html += `<div id="bulkBar" class="hidden htql-bulkbar">
+    <label class="flex items-center gap-2 font-semibold mr-2 cursor-pointer">
+      <input type="checkbox" id="bulkBarChk" class="rounded border-success" checked>
+      <span id="bulkCount">0 phiếu đã chọn:</span>
+    </label>
+    <button onclick="bulkAction('tra-hang')" class="htql-bulk-btn">📦 Đã trả hàng tất cả</button>
+    <button onclick="bulkThanhToan()" class="htql-bulk-btn">💰 Đã thanh toán</button>
+    <button onclick="bulkGanNguoiThu()" class="htql-bulk-btn">👤 Gán người thu</button>
+    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🚚 Lên xe (gán chuyến)</button>
+    <button onclick="bulkChuyenDaVe()" class="htql-bulk-btn">📅 Đã về (set ngày về)</button>
+    <button onclick="bulkAction('duplicate')" class="htql-bulk-btn">📋 Sao chép</button>
+    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🔀 Move chuyến</button>
+    <button onclick="bulkExportCsv()" class="htql-bulk-btn">⬇ Export CSV</button>
+    <button onclick="bulkAction('print')" class="htql-bulk-btn">🏷 In nhãn</button>
+    <button onclick="bulkAction('delete')" class="htql-bulk-btn htql-bulk-danger">🗑 Xoá</button>
+    <button onclick="clearSelection()" class="htql-bulk-btn ml-auto">✕ Bỏ chọn tất cả</button>
+  </div>
+  <style>
+    .htql-bulkbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#e7f6ec;border:1px solid #b7e4c7;color:#1a7440;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px}
+    .dark .htql-bulkbar{background:#10271b;border-color:#1f5135;color:#7ee2a8}
+    .htql-bulk-btn{border:1px solid #b7e4c7;color:#1a7440;background:#fff;border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer}
+    .htql-bulk-btn:hover{background:#d7f0e0}
+    .dark .htql-bulk-btn{background:#0d1f15;border-color:#1f5135;color:#7ee2a8}
+    .htql-bulk-danger{border-color:#f2b8b5;color:#c0392b}
+    .htql-bulk-danger:hover{background:#fde8e6}
+  </style>`;
+
   // Toolbar
   html += '<div class="htql-dt-toolbar">';
   if (perm.canCreateLo) {
@@ -433,7 +466,7 @@ loHangRoutes.get('/', async (c) => {
     html += `<input type="date" name="to" value="${esc(customTo)}" onchange="this.form.submit()" class="htql-dt-date">`;
   }
 
-  html += searchField({ value: freeSearch, placeholder: 'Tìm mã, khách, hãng, xe, tuyến...' });
+  html += searchField({ value: freeSearch, placeholder: 'Tìm mã, khách, hãng, xe, tuyến...', auto: true });
   html += `</form>`;
 
   html += `<button onclick="document.getElementById('colTogglePanel').classList.toggle('hidden')" class="htql-dt-btn">
@@ -728,22 +761,7 @@ loHangRoutes.get('/', async (c) => {
 
   html += `</div>`;
 
-  // Bulk action bar
-  html += `<div id="bulkBar" class="hidden fixed bottom-0 left-0 right-0 bg-primary text-white px-4 py-3 flex flex-wrap items-center gap-2 z-50 shadow-lg">
-    <span id="bulkCount" class="font-semibold mr-2">0 phiếu:</span>
-    <button onclick="bulkAction('tra-hang')" class="htql-bulk-btn">📦 Đã trả hàng</button>
-    <button onclick="bulkThanhToan()" class="htql-bulk-btn">💰 Đã thanh toán</button>
-    <button onclick="bulkGanNguoiThu()" class="htql-bulk-btn">👤 Gán người thu</button>
-    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🚛 Lên xe (gán chuyến)</button>
-    <button onclick="bulkChuyenDaVe()" class="htql-bulk-btn">📅 Đã về</button>
-    <button onclick="bulkAction('duplicate')" class="htql-bulk-btn">📋 Sao chép</button>
-    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🔀 Move chuyến</button>
-    <button onclick="bulkExportCsv()" class="htql-bulk-btn">⬇ Export CSV</button>
-    <button onclick="bulkAction('print')" class="htql-bulk-btn">🏷 In nhãn</button>
-    <button onclick="bulkAction('delete')" class="htql-bulk-btn" style="background:rgba(255,80,80,0.25)">🗑 Xoá</button>
-    <button onclick="clearSelection()" class="htql-bulk-btn ml-auto">✕ Bỏ chọn</button>
-  </div>
-  <style>.htql-bulk-btn{border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:4px 10px;font-size:13px;background:rgba(255,255,255,0.1)}.htql-bulk-btn:hover{background:rgba(255,255,255,0.25)}</style>`;
+  // (Thanh bulk action đã chuyển lên đầu — xem #bulkBar trước toolbar)
 
   // Client-side scripts
   html += `<script>
@@ -799,10 +817,16 @@ loHangRoutes.get('/', async (c) => {
     if (selected.length > 0) {
       bar.classList.remove('hidden');
       count.textContent = selected.length + ' phiếu đã chọn:';
+      const bc = document.getElementById('bulkBarChk'); if (bc) bc.checked = true;
     } else {
       bar.classList.add('hidden');
     }
   }
+
+  // Checkbox đầu thanh bulk: bỏ tick = bỏ chọn tất cả
+  document.getElementById('bulkBarChk')?.addEventListener('change', function() {
+    if (!this.checked) clearSelection();
+  });
 
   function clearSelection() {
     document.querySelectorAll('.lo-check').forEach(cb => cb.checked = false);
