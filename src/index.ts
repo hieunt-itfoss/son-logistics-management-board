@@ -1,37 +1,43 @@
-// Bỏ dấu tiếng Việt + dấu Latin mở rộng (Ó, ł...) để so khớp không phân biệt dấu.
-// Dùng cho tìm kiếm: "wolka" khớp "WÓLKA", "tiep" khớp "Tiệp".
-export function khongDau(s: string): string {
-  return (s || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // bỏ dấu tổ hợp
-    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
-    .replace(/ł/g, 'l').replace(/Ł/g, 'L')
-    .toLowerCase()
-    .trim();
-}
+import { Hono } from 'hono';
+import type { Env, AppVariables } from './types';
+import { authMiddleware } from './middleware/auth';
+import { rbacMiddleware } from './middleware/rbac';
+import { authRoutes, changePasswordRoutes } from './routes/auth';
+import { dashboardRoutes } from './routes/dashboard';
+import { doiTacRoutes } from './routes/doi-tac';
+import { tuyenRoutes } from './routes/tuyen';
+import { chuyenXeRoutes } from './routes/chuyen-xe';
+import { loHangRoutes } from './routes/lo-hang';
+import { khoRoutes } from './routes/kho';
+import { nhanVienRoutes } from './routes/nhan-vien';
+import { chamCongRoutes } from './routes/cham-cong';
+import { thuChiRoutes } from './routes/thu-chi';
+import { congCuRoutes } from './routes/cong-cu';
+import { managerRoutes } from './routes/manager';
 
-export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toISOString().split('T')[0];
-}
+const app = new Hono<{ Bindings: Env }>();
 
-export function formatCurrency(amount: number, currency = 'PLN'): string {
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
+app.get('/health', (c) => c.json({ status: 'ok' }));
 
-export function generateEntityId(prefix: string): string {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
-  return `${prefix}-${timestamp}-${random}`;
-}
+app.route('/', authRoutes);
 
-export function generateMaChuyen(tienTo: string, ngayDi: string, soXe: string): string {
-  const [, m, d] = ngayDi.split('-');
-  const yy = ngayDi.slice(2, 4);
-  return `${tienTo}${yy}${m}${d}-${soXe}`;
-}
+const protectedApp = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+protectedApp.use('*', authMiddleware);
+protectedApp.use('*', rbacMiddleware);
+
+protectedApp.route('/', changePasswordRoutes);
+protectedApp.route('/', dashboardRoutes);
+protectedApp.route('/doi-tac', doiTacRoutes);
+protectedApp.route('/tuyen', tuyenRoutes);
+protectedApp.route('/chuyen-xe', chuyenXeRoutes);
+protectedApp.route('/lo-hang', loHangRoutes);
+protectedApp.route('/kho', khoRoutes);
+protectedApp.route('/nhan-vien', nhanVienRoutes);
+protectedApp.route('/cham-cong', chamCongRoutes);
+protectedApp.route('/thu-chi', thuChiRoutes);
+protectedApp.route('/cong-cu', congCuRoutes);
+protectedApp.route('/manager', managerRoutes);
+
+app.route('/', protectedApp);
+
+export default app;
