@@ -27,6 +27,29 @@ import { khongDau } from '../utils';
 
 export const loHangRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
+// Bảng bỏ dấu cho biểu thức SQL (SQLite không có unaccent).
+// Dùng lower() + replace() lồng nhau để so khớp không phân biệt dấu ngay trong WHERE.
+const ACCENT_MAP: [string, string][] = [
+  ['à','a'],['á','a'],['ả','a'],['ã','a'],['ạ','a'],['ă','a'],['ằ','a'],['ắ','a'],['ẳ','a'],['ẵ','a'],['ặ','a'],
+  ['â','a'],['ầ','a'],['ấ','a'],['ẩ','a'],['ẫ','a'],['ậ','a'],
+  ['è','e'],['é','e'],['ẻ','e'],['ẽ','e'],['ẹ','e'],['ê','e'],['ề','e'],['ế','e'],['ể','e'],['ễ','e'],['ệ','e'],
+  ['ì','i'],['í','i'],['ỉ','i'],['ĩ','i'],['ị','i'],
+  ['ò','o'],['ó','o'],['ỏ','o'],['õ','o'],['ọ','o'],['ô','o'],['ồ','o'],['ố','o'],['ổ','o'],['ỗ','o'],['ộ','o'],
+  ['ơ','o'],['ờ','o'],['ớ','o'],['ở','o'],['ỡ','o'],['ợ','o'],
+  ['ù','u'],['ú','u'],['ủ','u'],['ũ','u'],['ụ','u'],['ư','u'],['ừ','u'],['ứ','u'],['ử','u'],['ữ','u'],['ự','u'],
+  ['ỳ','y'],['ý','y'],['ỷ','y'],['ỹ','y'],['ỵ','y'],
+  ['đ','d'],['ł','l'],
+];
+
+// Bọc cột thành biểu thức bỏ dấu + lower. VD: unaccentSql('kh.ten')
+function unaccentSql(col: string): string {
+  let expr = `lower(${col})`;
+  for (const [from, to] of ACCENT_MAP) {
+    expr = `replace(${expr},'${from}','${to}')`;
+  }
+  return expr;
+}
+
 function loHangPerm(perms: EffectivePerms): (typeof ROLE_PERMS)[Role] {
   const base = ROLE_PERMS[perms.role];
   return {
@@ -278,8 +301,14 @@ loHangRoutes.get('/', async (c) => {
     }
   }
 
-  // Free text search: lọc app-side (sau query) để match không phân biệt dấu
-  // (wolka↔WÓLKA, tiep↔Tiệp). Không đưa vào SQL LIKE vì SQLite không bỏ dấu.
+  // Free text search: đưa thẳng vào SQL với biểu thức bỏ dấu (unaccentSql)
+  // để match không phân biệt dấu mà vẫn đúng khi có LIMIT/phân trang sau này.
+  if (freeSearch) {
+    const needle = `%${khongDau(freeSearch)}%`;
+    const cols = ['lh.id','kh.ten','kh.ma_kh','h.ten','x.so_xe','x.bien_so','t.ten','lh.ly_do_thieu','cx.id'];
+    conditions.push('(' + cols.map(col => `${unaccentSql(col)} LIKE ?`).join(' OR ') + ')');
+    for (let i = 0; i < cols.length; i++) params.push(needle);
+  }
 
   const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
   const orderBy = 'ORDER BY cx.ngay_di DESC, lh.id DESC';
@@ -288,19 +317,7 @@ loHangRoutes.get('/', async (c) => {
     `${LO_HANG_SQL} ${whereClause} ${orderBy}`
   ).bind(...params).all<LoRow>();
 
-  let lots = results as LoRow[];
-
-  // Lọc tìm tự do (không dấu)
-  if (freeSearch) {
-    const needle = khongDau(freeSearch);
-    lots = lots.filter(lo => {
-      const hay = khongDau([
-        lo.id, lo.khach_hang_ten, lo.ma_kh, lo.hang_ten,
-        lo.so_xe, lo.bien_so, lo.tuyen_ten, lo.ly_do_thieu, lo.chuyen_xe_id,
-      ].filter(Boolean).join(' '));
-      return hay.includes(needle);
-    });
-  }
+  const lots = results as LoRow[];
 
   // Fetch dropdown data for create form
   const khRes = await c.env.DB.prepare('SELECT id, ten, ma_kh FROM khach_hang ORDER BY ten').all();
@@ -419,7 +436,6 @@ loHangRoutes.get('/', async (c) => {
     <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🚚 Lên xe (gán chuyến)</button>
     <button onclick="bulkChuyenDaVe()" class="htql-bulk-btn">📅 Đã về (set ngày về)</button>
     <button onclick="bulkAction('duplicate')" class="htql-bulk-btn">📋 Sao chép</button>
-    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🔀 Move chuyến</button>
     <button onclick="bulkExportCsv()" class="htql-bulk-btn">⬇ Export CSV</button>
     <button onclick="bulkAction('print')" class="htql-bulk-btn">🏷 In nhãn</button>
     <button onclick="bulkAction('delete')" class="htql-bulk-btn htql-bulk-danger">🗑 Xoá</button>
