@@ -63,7 +63,7 @@ const DM_GROUP_LABEL: Record<string, string> = {
 };
 
 function doiTacSearchField(search: string): string {
-  return searchField({ value: search, placeholder: 'Tìm tên, mã, SĐT...' });
+  return searchField({ value: search, placeholder: 'Tìm tên, mã, SĐT...', auto: true });
 }
 
 function canhBaoTag(quaHan: number): string {
@@ -564,14 +564,14 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
         ${btnPrimary('Khách mới', { icon: 'solar:add-circle-linear', onclick: 'openKhModal()' })}
         <form method="GET" action="/doi-tac" class="flex flex-nowrap items-center gap-2 flex-1 min-w-0 justify-end">
           <input type="hidden" name="sub" value="khach">
-          <select name="sort" onchange="this.form.submit()" class="form-control w-auto shrink-0">
+          ${select({ name: 'sort', onchange: 'this.form.submit()', class: 'w-auto shrink-0', options: `
             <option value="abc" ${sort === 'abc' ? 'selected' : ''}>A → Z</option>
             <option value="zyx" ${sort === 'zyx' ? 'selected' : ''}>Z → A</option>
             <option value="noNhieu" ${sort === 'noNhieu' ? 'selected' : ''}>Nợ nhiều nhất</option>
             <option value="noIt" ${sort === 'noIt' ? 'selected' : ''}>Nợ ít nhất</option>
             <option value="cbCao" ${sort === 'cbCao' ? 'selected' : ''}>Cảnh báo (cao→thấp)</option>
             <option value="cbThap" ${sort === 'cbThap' ? 'selected' : ''}>Cảnh báo (thấp→cao)</option>
-          </select>
+          ` })}
           ${doiTacSearchField(search)}
         </form>
       </div>
@@ -730,10 +730,10 @@ async function renderHangList(db: D1Database, sort: string, search: string): Pro
         ${btnPrimary('Hãng mới', { icon: 'solar:add-circle-linear', onclick: 'openHangModal()' })}
         <form method="GET" action="/doi-tac" class="flex flex-nowrap items-center gap-2 flex-1 min-w-0 justify-end">
           <input type="hidden" name="sub" value="hang">
-          <select name="sort" onchange="this.form.submit()" class="form-control w-auto shrink-0">
+          ${select({ name: 'sort', onchange: 'this.form.submit()', class: 'w-auto shrink-0', options: `
             <option value="abc" ${sort === 'abc' ? 'selected' : ''}>A → Z</option>
             <option value="zyx" ${sort === 'zyx' ? 'selected' : ''}>Z → A</option>
-          </select>
+          ` })}
           ${doiTacSearchField(search)}
         </form>
       </div>

@@ -1,6 +1,8 @@
 /**
- * Import Excel/CSV/TSV — ported from reference index.html (SonLogistic v7)
+ * Import Excel workbooks — ported from reference index.html (SonLogistic v7)
  */
+
+import * as XLSX from 'xlsx';
 
 export type ImportType = 'kh' | 'hang' | 'cty' | 'phieu';
 
@@ -50,6 +52,17 @@ function splitCsvLine(line: string, delim: string): string[] {
   return cells;
 }
 
+function normalizeImportHeader(h: string): string {
+  return h.replace(/^\*+/, '').replace(/\s*\(.*?\)\s*$/g, '').trim().toLowerCase();
+}
+
+function cellToString(v: unknown): string {
+  if (v == null || v === '') return '';
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v).trim();
+}
+
+/** Parse pasted tab/comma-separated text (e.g. from Excel clipboard). */
 export function parseDelimitedText(text: string): ParsedTable {
   let t = text;
   if (t.charCodeAt(0) === 0xfeff) t = t.slice(1);
@@ -63,9 +76,7 @@ export function parseDelimitedText(text: string): ParsedTable {
   }
 
   const rawHeaders = splitCsvLine(lines[0], delim);
-  const headers = rawHeaders.map((h) =>
-    h.replace(/^\*+/, '').replace(/\s*\(.*?\)\s*$/g, '').trim().toLowerCase(),
-  );
+  const headers = rawHeaders.map(normalizeImportHeader);
 
   const rows = lines.slice(1).filter((l) => l.trim()).map((line) => {
     const cells = splitCsvLine(line, delim);
@@ -77,6 +88,47 @@ export function parseDelimitedText(text: string): ParsedTable {
   });
 
   return { headers, rows };
+}
+
+/** Parse the first worksheet of an .xlsx / .xls file. */
+export function parseExcelBuffer(buf: ArrayBuffer | Uint8Array): ParsedTable {
+  const data = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  const wb = XLSX.read(data, { type: 'array', cellDates: true });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return { headers: [], rows: [] };
+
+  const sheet = wb.Sheets[sheetName];
+  const grid = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+  }) as unknown[][];
+
+  const nonEmpty = grid.filter((row) =>
+    row.some((cell) => cellToString(cell) !== ''),
+  );
+  if (nonEmpty.length < 1) return { headers: [], rows: [] };
+
+  const rawHeaders = nonEmpty[0].map((h) => cellToString(h));
+  const headers = rawHeaders.map(normalizeImportHeader);
+
+  const rows = nonEmpty.slice(1).map((line) => {
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      row[h] = cellToString(line[i]);
+    });
+    return row;
+  });
+
+  return { headers, rows };
+}
+
+/** Decode a base64-encoded Excel file and parse it. */
+export function parseExcelBase64(base64: string): ParsedTable {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return parseExcelBuffer(bytes.buffer);
 }
 
 export function normImportDate(s: string): string {
@@ -548,32 +600,52 @@ export function buildImportPreview(
   };
 }
 
-export function csvTemplate(type: ImportType): { filename: string; content: string } {
+type TemplateSheet = { headers: string[]; rows: (string | number)[][] };
+
+function templateSheet(type: ImportType): TemplateSheet {
   if (type === 'kh') {
     return {
-      filename: 'mau_khach.csv',
-      content:
-        '\uFEFFtenKH,nip,diaChi,sdt,hanTT,ghiChu\nA QUÝ,PL5210999000,Warsaw,+48 600 000 001,30,\n',
+      headers: ['tenKH', 'nip', 'diaChi', 'sdt', 'hanTT', 'ghiChu'],
+      rows: [['A QUÝ', 'PL5210999000', 'Warsaw', '+48 600 000 001', 30, '']],
     };
   }
   if (type === 'hang') {
     return {
-      filename: 'mau_hang.csv',
-      content: '\uFEFFtenHang,nuoc,diaChi\nItalmod,Ý,Bologna\n',
+      headers: ['tenHang', 'nuoc', 'diaChi'],
+      rows: [['Italmod', 'Ý', 'Bologna']],
     };
   }
   if (type === 'cty') {
     return {
-      filename: 'mau_cty_vt.csv',
-      content: '\uFEFFtenCtyVT,diaChi,sdt\nPolFracht,Warszawa,+48 22 444 4444\n',
+      headers: ['tenCtyVT', 'diaChi', 'sdt'],
+      rows: [['PolFracht', 'Warszawa', '+48 22 444 4444']],
     };
   }
   return {
-    filename: 'mau_phieu.csv',
-    content:
-      '\uFEFFtenKH,tenHang,soKien,soXe,tenTuyen,ngayDi,donGia,tienTe,thanhTien,soTienHang,ghiChu\n' +
-      'A HUI,JM,100,XE 50,Paris-Wólka,2026-06-01,85,EUR,8500,3000,phiếu đầy đủ\n' +
-      'A22,,8,,Prato-Wólka,,,PLN,760,,phiếu vận tải (chỉ có thành tiền)\n' +
-      'ADAM,Italmod,,,Prato-Wólka,,,PLN,,5000,phiếu tiền hàng (chỉ có tiền hàng)\n',
+    headers: [
+      'tenKH', 'tenHang', 'soKien', 'soXe', 'tenTuyen', 'ngayDi',
+      'donGia', 'tienTe', 'thanhTien', 'soTienHang', 'ghiChu',
+    ],
+    rows: [
+      ['A HUI', 'JM', 100, 'XE 50', 'Paris-Wólka', '2026-06-01', 85, 'EUR', 8500, 3000, 'phiếu đầy đủ'],
+      ['A22', '', 8, '', 'Prato-Wólka', '', '', 'PLN', 760, '', 'phiếu vận tải (chỉ có thành tiền)'],
+      ['ADAM', 'Italmod', '', '', 'Prato-Wólka', '', '', 'PLN', '', 5000, 'phiếu tiền hàng (chỉ có tiền hàng)'],
+    ],
   };
+}
+
+/** Build a downloadable .xlsx template for the given import type. */
+export function excelTemplate(type: ImportType): { filename: string; buffer: Uint8Array } {
+  const { headers, rows } = templateSheet(type);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Import');
+  const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array;
+  const names: Record<ImportType, string> = {
+    kh: 'mau_khach.xlsx',
+    hang: 'mau_hang.xlsx',
+    cty: 'mau_cty_vt.xlsx',
+    phieu: 'mau_phieu.xlsx',
+  };
+  return { filename: names[type], buffer };
 }

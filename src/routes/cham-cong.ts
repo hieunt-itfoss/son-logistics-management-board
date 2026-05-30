@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, ChamCong, NhanVien, AppVariables } from '../types';
 import { layout } from '../utils/layout';
-import { pageHeader, card, dataTable, tableRow, tableEmpty, btnPrimary, btnSecondary, modalShell, modalFooterInner, formGroup, input, select } from '../utils/ui';
+import { pageHeader, card, dataTable, tableRow, tableEmpty, btnPrimary, btnSecondary, modalShell, modalFooterInner, formGroup, formField, input, select, FILTER_LABEL_CLASS } from '../utils/ui';
 
 export const chamCongRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -57,17 +57,8 @@ chamCongRoutes.get('/', async (c) => {
     <div class="card mb-6">
       <div class="card-body">
       <form method="GET" action="/cham-cong" class="flex flex-wrap items-end gap-3">
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Tháng</label>
-          <input type="month" name="thang" value="${esc(month)}" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">NV</label>
-          <select name="nv" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-            <option value="">Tất cả</option>
-            ${nvOpts}
-          </select>
-        </div>
+        ${formField('Tháng', input({ type: 'month', name: 'thang', value: esc(month), class: 'w-auto' }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('NV', select({ name: 'nv', class: 'w-auto', options: `<option value="">Tất cả</option>${nvOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
         <button type="submit" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 text-sm cursor-pointer">Lọc</button>
         ${month || nvFilter ? '<a href="/cham-cong" class="text-sm text-primary hover:underline self-center">Xoá lọc</a>' : ''}
       </form>

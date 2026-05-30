@@ -1,3 +1,15 @@
+// Strip Vietnamese diacritics and extended Latin (Ó, ł…) for accent-insensitive matching.
+// Used in search: "wolka" matches "WÓLKA", "tiep" matches "Tiệp".
+export function khongDau(s: string): string {
+  return (s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // strip combining marks
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .replace(/ł/g, 'l').replace(/Ł/g, 'L')
+    .toLowerCase()
+    .trim();
+}
+
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   return d.toISOString().split('T')[0];
