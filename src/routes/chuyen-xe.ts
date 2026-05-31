@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, ChuyenXe, Tuyen, Xe, LoHang } from '../types';
 import { layout } from '../utils/layout';
-import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, badge, searchField } from '../utils/ui';
+import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, badge, searchField, formField, input, select, FILTER_LABEL_CLASS } from '../utils/ui';
 
 // ─── Joined-row types ───────────────────────────────────────────────
 interface ChuyenRow extends ChuyenXe {
@@ -221,65 +221,32 @@ chuyenXeRoutes.get('/', async (c) => {
     <div class="card mb-4">
       <div class="card-body">
       <form method="GET" action="/chuyen-xe" class="flex flex-wrap items-end gap-3">
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Th\u1eddi gian</label>
-          <select name="range" id="filterRange" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+        ${formField('Th\u1eddi gian', select({ name: 'range', id: 'filterRange', class: 'w-auto', options: `
             <option value="all"${range === 'all' ? ' selected' : ''}>T\u1ea5t c\u1ea3</option>
             <option value="today"${range === 'today' ? ' selected' : ''}>H\u00f4m nay</option>
             <option value="thisWeek"${range === 'thisWeek' ? ' selected' : ''}>Tu\u1ea7n n\u00e0y</option>
             <option value="thisMonth"${range === 'thisMonth' ? ' selected' : ''}>Th\u00e1ng n\u00e0y</option>
             <option value="custom"${range === 'custom' ? ' selected' : ''}>T\u00f9y ch\u1ecdn</option>
-          </select>
-        </div>
+          ` }), { labelClass: FILTER_LABEL_CLASS })}
         <div id="customDateWrap" class="${range === 'custom' ? '' : 'hidden'} flex gap-2">
-          <div><label class="block text-xs font-medium text-gray-500 mb-1">T\u1eeb</label>
-            <input type="date" name="from" value="${esc(from)}" class="border border-gray-300 rounded-md px-3 py-2 text-sm"></div>
-          <div><label class="block text-xs font-medium text-gray-500 mb-1">\u0110\u1ebfn</label>
-            <input type="date" name="to" value="${esc(to)}" class="border border-gray-300 rounded-md px-3 py-2 text-sm"></div>
+          ${formField('T\u1eeb', input({ type: 'date', name: 'from', value: esc(from), class: 'w-auto' }), { labelClass: FILTER_LABEL_CLASS })}
+          ${formField('\u0110\u1ebfn', input({ type: 'date', name: 'to', value: esc(to), class: 'w-auto' }), { labelClass: FILTER_LABEL_CLASS })}
         </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Số xe</label>
-          <select name="xe" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">— Tất cả —</option>${xeOpts}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Biển số</label>
-          <select name="bien_so" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">— Tất cả —</option>${bienSoOpts}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Tuyến</label>
-          <select name="tuyen" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">— Tất cả —</option>${tuyenOpts}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Cty VT</label>
-          <select name="cty_vt" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">— Tất cả —</option>${ctyVtOpts}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Tài xế</label>
-          <select name="tai_xe" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">— Tất cả —</option>${taiXeOpts}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Trạng thái</label>
-          <select name="status" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+        ${formField('Số xe', select({ name: 'xe', class: 'w-auto', options: `<option value="">— Tất cả —</option>${xeOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Biển số', select({ name: 'bien_so', class: 'w-auto', options: `<option value="">— Tất cả —</option>${bienSoOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Tuyến', select({ name: 'tuyen', class: 'w-auto', options: `<option value="">— Tất cả —</option>${tuyenOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Cty VT', select({ name: 'cty_vt', class: 'w-auto', options: `<option value="">— Tất cả —</option>${ctyVtOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Tài xế', select({ name: 'tai_xe', class: 'w-auto', options: `<option value="">— Tất cả —</option>${taiXeOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Trạng thái', select({ name: 'status', class: 'w-auto', options: `
             <option value="">— Tất cả —</option>
             <option value="planned"${statusFilter === 'planned' ? ' selected' : ''}>Kế hoạch</option>
             <option value="dang_chay"${statusFilter === 'dang_chay' ? ' selected' : ''}>Đang chạy</option>
             <option value="hoan_thanh"${statusFilter === 'hoan_thanh' ? ' selected' : ''}>Hoàn thành</option>
             <option value="huy"${statusFilter === 'huy' ? ' selected' : ''}>Hủy</option>
-          </select>
-        </div>
+          ` }), { labelClass: FILTER_LABEL_CLASS })}
         <div class="flex-1">
-          <label class="block text-xs font-medium text-bodytext dark:text-darklink mb-1">Tìm kiếm</label>
-          ${searchField({ value: esc(q), placeholder: 'Mã chuyến, biển số, tuyến, tài xế...' })}
+          <label class="block ${FILTER_LABEL_CLASS} mb-1">Tìm kiếm</label>
+          ${searchField({ value: esc(q), placeholder: 'Mã chuyến, biển số, tuyến, tài xế...', auto: true })}
         </div>
         <button type="submit" class="btn text-sm cursor-pointer">Lọc</button>
         ${hasFilter ? '<a href="/chuyen-xe" class="text-error hover:underline text-sm">Xóa lọc</a>' : ''}
@@ -367,66 +334,33 @@ chuyenXeRoutes.get('/create', async (c) => {
         </div>`}
 
         <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tuy\u1ebfn</label>
-            <select name="tuyen_id" id="selTuyen" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-              <option value="">-- Ch\u1ecdn tuy\u1ebfn --</option>${tuyenOpts}
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Xe</label>
-            <select name="xe_id" id="selXe" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-              <option value="">-- Ch\u1ecdn xe --</option>${xeOpts}
-            </select>
-          </div>
+          ${formField('Tuy\u1ebfn', select({ name: 'tuyen_id', id: 'selTuyen', required: true, options: `<option value="">-- Ch\u1ecdn tuy\u1ebfn --</option>${tuyenOpts}` }), { required: true })}
+          ${formField('Xe', select({ name: 'xe_id', id: 'selXe', required: true, options: `<option value="">-- Ch\u1ecdn xe --</option>${xeOpts}` }), { required: true })}
         </div>
 
         <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ng\u00e0y \u0111i</label>
-            <input type="date" name="ngay_di" id="ngayDi" required value="${ch?.ngay_di || today}" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ng\u00e0y v\u1ec1 (\u0111\u1ec3 tr\u1ed1ng n\u1ebfu ch\u01b0a v\u1ec1)</label>
-            <input type="date" name="ngay_den" value="${ch?.ngay_den || ''}" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          </div>
+          ${formField('Ng\u00e0y \u0111i', input({ type: 'date', name: 'ngay_di', id: 'ngayDi', required: true, value: ch?.ngay_di || today }), { required: true })}
+          ${formField('Ng\u00e0y v\u1ec1 (\u0111\u1ec3 tr\u1ed1ng n\u1ebfu ch\u01b0a v\u1ec1)', input({ type: 'date', name: 'ngay_den', value: ch?.ngay_den || '' }))}
         </div>
 
         <div class="grid grid-cols-3 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Gi\u00e1 chuy\u1ebfn (tr\u1ea3 Cty VT)</label>
-            <input type="number" name="gia_chuyen" value="${ch?.gia_chuyen ?? 5000}" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ti\u1ec1n t\u1ec7</label>
-            <select name="tien_te" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          ${formField('Gi\u00e1 chuy\u1ebfn (tr\u1ea3 Cty VT)', input({ type: 'number', name: 'gia_chuyen', value: String(ch?.gia_chuyen ?? 5000) }))}
+          ${formField('Ti\u1ec1n t\u1ec7', select({ name: 'tien_te', options: `
               <option value="PLN"${ch?.tien_te === 'PLN' ? ' selected' : ''}>PLN</option>
               <option value="EUR"${ch?.tien_te === 'EUR' ? ' selected' : ''}>EUR</option>
               <option value="USD"${ch?.tien_te === 'USD' ? ' selected' : ''}>USD</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tr\u1ea1ng th\u00e1i</label>
-            <select name="trang_thai" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+            ` }))}
+          ${formField('Tr\u1ea1ng th\u00e1i', select({ name: 'trang_thai', options: `
               <option value="planned"${ch?.trang_thai === 'planned' ? ' selected' : ''}>K\u1ebf ho\u1ea1ch</option>
               <option value="dang_chay"${ch?.trang_thai === 'dang_chay' ? ' selected' : ''}>\u0110ang ch\u1ea1y</option>
               <option value="hoan_thanh"${ch?.trang_thai === 'hoan_thanh' ? ' selected' : ''}>Ho\u00e0n th\u00e0nh</option>
               <option value="huy"${ch?.trang_thai === 'huy' ? ' selected' : ''}>H\u1ee7y</option>
-            </select>
-          </div>
+            ` }))}
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">S\u1ed1 SENT / Gi\u1ea5y t\u1edd (CMR/DDT)</label>
-          <input type="text" name="so_sent_va_gt" value="${esc(ch?.so_sent_va_gt)}" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
+        ${formField('S\u1ed1 SENT / Gi\u1ea5y t\u1edd (CMR/DDT)', input({ type: 'text', name: 'so_sent_va_gt', value: esc(ch?.so_sent_va_gt) }))}
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">T\u00e0i x\u1ebf</label>
-          <select name="tai_xe_id" id="selTaiXe" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">-- T\u1ef1 \u0111\u1ed9ng t\u1eeb xe --</option>${taiXeOpts}
-          </select>
-        </div>
+        ${formField('T\u00e0i x\u1ebf', select({ name: 'tai_xe_id', id: 'selTaiXe', options: `<option value="">-- T\u1ef1 \u0111\u1ed9ng t\u1eeb xe --</option>${taiXeOpts}` }))}
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Ghi ch\u00fa</label>

@@ -12,6 +12,10 @@ import {
   btnSecondary,
   modalShell,
   modalFooterInner,
+  formGroup,
+  formField,
+  input,
+  select,
 } from "../utils/ui";
 import { ROLE_LABELS, hashPassword } from "../middleware/auth";
 import {
@@ -393,12 +397,11 @@ managerRoutes.get("/", async (c) => {
       size: "lg",
       body: `<div class="space-y-4">
           <p class="text-xs text-bodytext bg-lightprimary/30 dark:bg-darkborder rounded-lg p-3" id="userPermHint"></p>
-          <div>
-            <label class="block text-sm font-medium text-dark dark:text-white mb-1">Vai trò <span class="text-xs text-bodytext">(chỉ admin đổi được)</span></label>
-            <select id="userPermRole" class="form-control w-full" title="Chỉ admin được đổi vai trò">
-              ${PERM_MATRIX_ROLES.map((r) => `<option value="${r}">${esc(ROLE_LABELS[r] || r)}</option>`).join("")}
-            </select>
-          </div>
+          ${formField('Vai trò <span class="text-xs text-bodytext">(chỉ admin đổi được)</span>', select({
+            id: 'userPermRole',
+            title: 'Chỉ admin được đổi vai trò',
+            options: PERM_MATRIX_ROLES.map((r) => `<option value="${r}">${esc(ROLE_LABELS[r] || r)}</option>`).join(''),
+          }))}
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead><tr class="border-b border-light-dark dark:border-darkborder">
@@ -446,7 +449,7 @@ managerRoutes.get("/", async (c) => {
         tbody += '<tr class="border-b border-light-dark"><td>' + (labels[k] || k) + '</td>'
           + '<td class="text-center">' + permBoolLabel(def) + '</td>'
           + '<td class="text-center"><input type="checkbox" data-perm-key="' + k + '" data-override-cb ' + (has ? 'checked' : '') + '></td>'
-          + '<td class="text-center"><select data-perm-key="' + k + '" data-perm-val ' + (has ? '' : 'disabled') + '>'
+          + '<td class="text-center"><select class="form-control w-full" data-perm-key="' + k + '" data-perm-val ' + (has ? '' : 'disabled') + '>'
           + '<option value="true"' + (val === true ? ' selected' : '') + '>✓ Có</option>'
           + '<option value="false"' + (val === false ? ' selected' : '') + '>✗ Không</option></select></td></tr>';
       });
@@ -530,19 +533,8 @@ managerRoutes.get("/", async (c) => {
               <input type="text" name="display_name" required class="form-control w-full" placeholder="VD: Nguyễn Văn A">
             </div>
             <div class="grid grid-cols-2 gap-3 pt-2">
-              <div>
-                <label class="block text-sm font-medium text-dark dark:text-white mb-1">Vai trò</label>
-                <select name="role" class="form-control w-full">
-                  ${PERM_MATRIX_ROLES.map((r) => `<option value="${r}">${esc(ROLE_LABELS[r] || r)}</option>`).join("")}
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-dark dark:text-white mb-1">Liên kết NV</label>
-                <select name="nhan_vien_id" class="form-control w-full">
-                  <option value="">— Không liên kết —</option>
-                  ${(nvsForSelect || []).map((nv) => `<option value="${nv.id}">${esc(nv.ten)} (${nv.id})</option>`).join("")}
-                </select>
-              </div>
+              ${formGroup('Vai trò', select({ name: 'role', options: PERM_MATRIX_ROLES.map((r) => `<option value="${r}">${esc(ROLE_LABELS[r] || r)}</option>`).join('') }))}
+              ${formGroup('Liên kết NV', select({ name: 'nhan_vien_id', options: `<option value="">— Không liên kết —</option>${(nvsForSelect || []).map((nv) => `<option value="${nv.id}">${esc(nv.ten)} (${nv.id})</option>`).join('')}` }))}
             </div>
             <div class="flex items-center gap-2 pt-2">
               <input type="checkbox" name="must_change_password" id="cuCreateMustChange" checked class="w-4 h-4 rounded border-bordergray text-primary">
@@ -648,14 +640,7 @@ managerRoutes.get("/", async (c) => {
             <label class="block text-sm font-medium text-dark dark:text-white mb-1">Họ tên <span class="text-error">*</span></label>
             <input type="text" name="ten" required class="form-control w-full">
           </div>
-          <div>
-            <label class="block text-sm font-medium text-dark dark:text-white mb-1">Vai trò</label>
-            <select name="vai_tro" class="form-control w-full">
-              ${Object.entries(NV_ROLE_LABELS)
-                .map(([k, v]) => `<option value="${k}">${v}</option>`)
-                .join("")}
-            </select>
-          </div>
+          ${formGroup('Vai trò', select({ name: 'vai_tro', options: Object.entries(NV_ROLE_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('') }))}
           <div>
             <label class="block text-sm font-medium text-dark dark:text-white mb-1">SĐT</label>
             <input type="text" name="sdt" class="form-control w-full">

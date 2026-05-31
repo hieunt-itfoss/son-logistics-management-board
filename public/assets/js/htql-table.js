@@ -1,5 +1,5 @@
 /**
- * HTQL DataTable: client-side sorting + column resizing.
+ * HTQL DataTable: client-side sorting, column resizing, debounced search.
  * Each .htql-dt[data-htql-dt] gets its own instance.
  */
 (function () {
@@ -8,6 +8,35 @@
   function init() {
     document.querySelectorAll(".htql-dt[data-htql-dt]").forEach(setupTable);
     document.querySelectorAll(".htql-search-input[data-auto-width]").forEach(autoWidthInput);
+    document.querySelectorAll(".htql-search-input[data-auto-search]").forEach(setupAutoSearch);
+  }
+  function setupAutoSearch(input) {
+    var form = input.closest("form");
+    if (!form) return;
+    var timer = null;
+    var lastSubmitted = input.value;
+
+    function submitSearch() {
+      if (input.value === lastSubmitted) return;
+      lastSubmitted = input.value;
+      form.classList.add("htql-search-pending");
+      if (typeof form.requestSubmit === "function") form.requestSubmit();
+      else form.submit();
+    }
+
+    input.addEventListener("input", function () {
+      clearTimeout(timer);
+      var delay = input.value === "" ? 0 : 350;
+      timer = setTimeout(submitSearch, delay);
+    });
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        clearTimeout(timer);
+        e.preventDefault();
+        submitSearch();
+      }
+    });
   }
 
   function autoWidthInput(input) {
@@ -58,6 +87,69 @@
 
       setupResize(th, table);
     });
+
+    setupGroupToggle(table);
+  }
+
+  /* ── Group row expand/collapse (client-side, no page reload) ── */
+  function setupGroupToggle(table) {
+    table.querySelectorAll(".htql-dt-group-row").forEach(function (groupRow) {
+      var groupId = groupRow.getAttribute("data-group-id");
+      if (!groupId) return;
+
+      function childRows() {
+        return Array.from(table.querySelectorAll('tr.lo-row[data-group="' + groupId + '"]'));
+      }
+
+      function isCollapsed() {
+        return groupRow.getAttribute("data-collapsed") === "true";
+      }
+
+      function setCollapsed(collapsed) {
+        groupRow.setAttribute("data-collapsed", collapsed ? "true" : "false");
+        groupRow.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        var toggle = groupRow.querySelector(".htql-dt-group-toggle");
+        if (toggle) {
+          toggle.innerHTML = collapsed ? "&#9654;" : "&#9660;";
+          toggle.title = collapsed ? "M\u1edf" : "Thu g\u1ecdn";
+        }
+        childRows().forEach(function (tr) {
+          tr.classList.toggle("htql-dt-child-hidden", collapsed);
+        });
+        syncCollapsedParam(table);
+      }
+
+      groupRow.addEventListener("click", function (e) {
+        if (e.target.closest("input, a, button, label")) return;
+        setCollapsed(!isCollapsed());
+      });
+
+      groupRow.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setCollapsed(!isCollapsed());
+        }
+      });
+
+      groupRow.setAttribute("tabindex", "0");
+      groupRow.setAttribute("role", "button");
+    });
+  }
+
+  function syncCollapsedParam(table) {
+    var collapsed = [];
+    table.querySelectorAll('.htql-dt-group-row[data-collapsed="true"]').forEach(function (row) {
+      var id = row.getAttribute("data-group-id");
+      if (id) collapsed.push(id);
+    });
+    var value = collapsed.join(",");
+    document.querySelectorAll('input[name="collapsed"]').forEach(function (inp) {
+      inp.value = value;
+    });
+    var url = new URL(window.location.href);
+    if (value) url.searchParams.set("collapsed", value);
+    else url.searchParams.delete("collapsed");
+    history.replaceState(null, "", url.toString());
   }
 
   /* ── Column resize ──────────────────────────────────────── */

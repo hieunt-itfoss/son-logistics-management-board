@@ -1,7 +1,6 @@
 -- HTQLVT sample seed data (15 customers, 10 suppliers, 7 carriers, 9 vehicles, 15 staff, 9 routes, 22 trips, 47 lots, 39 receipts, 25 expenses)
--- Auto-generated. Run AFTER migrations. Idempotent: uses INSERT OR REPLACE.
-PRAGMA foreign_keys=OFF;
-BEGIN TRANSACTION;
+-- Auto-generated. Run AFTER migrations. Idempotent: DELETE child rows first, then INSERT OR REPLACE.
+-- Note: remote D1 does not allow SQL BEGIN/COMMIT; statements run without an explicit transaction.
 DELETE FROM phieu_chi;
 DELETE FROM phieu_thu;
 DELETE FROM lo_hang;
@@ -232,5 +231,3 @@ INSERT OR REPLACE INTO phieu_chi (id,ngay,dau_muc,so_tien,tien_te,hinh_thuc,ghi_
 INSERT OR REPLACE INTO so_du_dau_ky (id,tien_te,so_du,ngay_ap_dung,created_at) VALUES ('SD-PLN','PLN',25000,'2026-01-01',datetime('now'));
 INSERT OR REPLACE INTO so_du_dau_ky (id,tien_te,so_du,ngay_ap_dung,created_at) VALUES ('SD-EUR','EUR',8500,'2026-01-01',datetime('now'));
 INSERT OR REPLACE INTO so_du_dau_ky (id,tien_te,so_du,ngay_ap_dung,created_at) VALUES ('SD-USD','USD',320,'2026-01-01',datetime('now'));
-COMMIT;
-PRAGMA foreign_keys=ON;

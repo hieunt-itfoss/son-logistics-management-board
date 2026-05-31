@@ -287,56 +287,116 @@ export function btnDanger(label: string, opts?: { onclick?: string }): string {
   return `<button type="button" class="btn-error cursor-pointer"${onclick}>${label}</button>`;
 }
 
+/** Standard form-control classes — use in client-side templates when needed */
+export const FORM_CONTROL_CLASS = "form-control w-full";
+
+/** Compact toolbar / filter label */
+export const FILTER_LABEL_CLASS =
+  "text-xs font-medium text-bodytext dark:text-darklink";
+
+type ControlAttrs = Record<string, string | boolean | number | undefined>;
+
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function controlClass(extra?: string): string {
+  const hasWidth = extra && /\bw-(auto|full|\[)/.test(extra);
+  const base = hasWidth ? "form-control" : FORM_CONTROL_CLASS;
+  return extra ? `${base} ${extra}`.trim() : base;
+}
+
+function controlAttrs(
+  attrs: ControlAttrs,
+): { className: string; parts: string } {
+  const { class: extraClass, ...rest } = attrs;
+  const parts = Object.entries(rest)
+    .filter(([, v]) => v !== undefined && v !== false)
+    .map(([k, v]) =>
+      v === true ? k : `${k}="${String(v).replace(/"/g, "&quot;")}"`,
+    )
+    .join(" ");
+  return {
+    className: controlClass(extraClass as string | undefined),
+    parts,
+  };
+}
+
+/** Label + control wrapper — same layout for input, select, textarea */
+export function formField(
+  label: string,
+  control: string,
+  opts?: {
+    required?: boolean;
+    labelClass?: string;
+    class?: string;
+  },
+): string {
+  const star = opts?.required ? ' <span class="text-error">*</span>' : "";
+  const labelCls =
+    opts?.labelClass ??
+    "text-sm font-medium text-dark dark:text-white mb-1";
+  const divCls = opts?.class ? ` class="${opts.class}"` : "";
+  return `<div${divCls}><label class="block ${labelCls}">${label}${star}</label>${control}</div>`;
+}
+
 export function formGroup(
   label: string,
   control: string,
   opts?: { required?: boolean },
 ): string {
-  const star = opts?.required ? ' <span class="text-error">*</span>' : "";
-  return `
-    <div>
-      <label class="block text-sm font-medium text-dark dark:text-white mb-2">${label}${star}</label>
-      ${control}
-    </div>`;
+  return formField(label, control, {
+    ...opts,
+    labelClass: "text-sm font-medium text-dark dark:text-white mb-2",
+  });
 }
 
-export function input(
-  attrs: Record<string, string | boolean | undefined>,
-): string {
-  const parts = Object.entries(attrs)
-    .filter(([, v]) => v !== undefined && v !== false)
-    .map(([k, v]) =>
-      v === true ? k : `${k}="${String(v).replace(/"/g, "&quot;")}"`,
-    )
-    .join(" ");
-  return `<input class="form-control" ${parts}>`;
+export function input(attrs: ControlAttrs): string {
+  const { className, parts } = controlAttrs(attrs);
+  return `<input class="${className}" ${parts}>`;
 }
 
 export function select(
-  attrs: Record<string, string | boolean | undefined> & { options: string },
+  attrs: ControlAttrs & { options: string },
 ): string {
   const { options, ...rest } = attrs;
-  const parts = Object.entries(rest)
-    .filter(([, v]) => v !== undefined && v !== false)
-    .map(([k, v]) =>
-      v === true ? k : `${k}="${String(v).replace(/"/g, "&quot;")}"`,
-    )
-    .join(" ");
-  return `<select class="form-control w-full" ${parts}>${options}</select>`;
+  const { className, parts } = controlAttrs(rest);
+  return `<select class="${className}" ${parts}>${options}</select>`;
 }
 
-export function textarea(
-  attrs: Record<string, string | boolean | undefined>,
-): string {
+export function textarea(attrs: ControlAttrs): string {
   const value = attrs.value ?? "";
   const { value: _v, ...rest } = attrs;
-  const parts = Object.entries(rest)
-    .filter(([, v]) => v !== undefined && v !== false)
-    .map(([k, v]) =>
-      v === true ? k : `${k}="${String(v).replace(/"/g, "&quot;")}"`,
-    )
-    .join(" ");
-  return `<textarea class="form-control" ${parts}>${value}</textarea>`;
+  const { className, parts } = controlAttrs(rest);
+  return `<textarea class="${className}" ${parts}>${value}</textarea>`;
+}
+
+/** Type-to-search combobox — one field, hidden input holds the selected value */
+export function searchSelect(opts: {
+  id: string;
+  name: string;
+  required?: boolean;
+  placeholder?: string;
+  options: { value: string; label: string }[];
+  value?: string;
+}): string {
+  const ph = esc(opts.placeholder ?? "Gõ để tìm...");
+  const dataOpts = esc(JSON.stringify(opts.options));
+  const req = opts.required ? ' data-required="true"' : "";
+  const selected = opts.value
+    ? opts.options.find((o) => o.value === opts.value)
+    : undefined;
+  const inputVal = selected ? esc(selected.label) : "";
+  const hiddenVal = selected ? esc(selected.value) : "";
+  return `<div class="htql-combobox relative w-full" data-htql-combobox data-id="${esc(opts.id)}" data-name="${esc(opts.name)}" data-options="${dataOpts}"${req} data-placeholder="${ph}">
+    <input type="text" id="${esc(opts.id)}_input" class="form-control w-full" placeholder="${ph}" autocomplete="off" value="${inputVal}" aria-autocomplete="list" aria-controls="${esc(opts.id)}_list" role="combobox" aria-expanded="false">
+    <input type="hidden" name="${esc(opts.name)}" id="${esc(opts.id)}" value="${hiddenVal}">
+    <ul id="${esc(opts.id)}_list" class="htql-combobox-list hidden" role="listbox"></ul>
+  </div>`;
 }
 
 export function alert(
@@ -486,15 +546,17 @@ export function searchField(
     value?: string;
     placeholder: string;
     extraInputClass?: string;
+    auto?: boolean;
   },
 ): string {
   const name = opts.name ?? "q";
   const val = opts.value ?? "";
   const ph = opts.placeholder;
   const extra = opts.extraInputClass ? ` ${opts.extraInputClass}` : "";
+  const autoAttr = opts.auto ? ` data-auto-search="1"` : "";
   return `<div class="htql-search">
-    <input type="text" name="${name}" autocomplete="off" value="${val}" placeholder="${ph}" class="htql-search-input${extra}" data-auto-width>
-    <button type="submit" class="htql-search-btn" title="Tìm" aria-label="Tìm">
+    <input type="text" name="${name}" autocomplete="off" value="${val}" placeholder="${ph}" class="htql-search-input${extra}" data-auto-width${autoAttr}>
+    <button type="submit" class="htql-search-btn" title="Search" aria-label="Search">
       <iconify-icon icon="solar:magnifer-broken" class="text-lg"></iconify-icon>
     </button>
   </div>`;

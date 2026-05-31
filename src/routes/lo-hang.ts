@@ -10,11 +10,16 @@ import {
   btnSecondary,
   btnModalOutline,
   searchField,
+  formField,
+  input,
+  select,
+  FILTER_LABEL_CLASS,
 } from '../utils/ui';
 import {
   parseDelimitedText,
+  parseExcelBase64,
   buildImportPreview,
-  csvTemplate,
+  excelTemplate,
   VIRTUAL_XE_ID,
   type ImportType,
   type PhieuDraft,
@@ -23,8 +28,32 @@ import {
   type NewXeDraft,
   type NewChuyenDraft,
 } from '../utils/import-data';
+import { khongDau } from '../utils';
 
 export const loHangRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+
+// Accent-stripping map for SQL expressions (SQLite has no unaccent).
+// Nested lower() + replace() matches diacritic-insensitive text in WHERE clauses.
+const ACCENT_MAP: [string, string][] = [
+  ['à','a'],['á','a'],['ả','a'],['ã','a'],['ạ','a'],['ă','a'],['ằ','a'],['ắ','a'],['ẳ','a'],['ẵ','a'],['ặ','a'],
+  ['â','a'],['ầ','a'],['ấ','a'],['ẩ','a'],['ẫ','a'],['ậ','a'],
+  ['è','e'],['é','e'],['ẻ','e'],['ẽ','e'],['ẹ','e'],['ê','e'],['ề','e'],['ế','e'],['ể','e'],['ễ','e'],['ệ','e'],
+  ['ì','i'],['í','i'],['ỉ','i'],['ĩ','i'],['ị','i'],
+  ['ò','o'],['ó','o'],['ỏ','o'],['õ','o'],['ọ','o'],['ô','o'],['ồ','o'],['ố','o'],['ổ','o'],['ỗ','o'],['ộ','o'],
+  ['ơ','o'],['ờ','o'],['ớ','o'],['ở','o'],['ỡ','o'],['ợ','o'],
+  ['ù','u'],['ú','u'],['ủ','u'],['ũ','u'],['ụ','u'],['ư','u'],['ừ','u'],['ứ','u'],['ử','u'],['ữ','u'],['ự','u'],
+  ['ỳ','y'],['ý','y'],['ỷ','y'],['ỹ','y'],['ỵ','y'],
+  ['đ','d'],['ł','l'],
+];
+
+// Wrap a column in diacritic-stripping + lower(). e.g. unaccentSql('kh.ten')
+function unaccentSql(col: string): string {
+  let expr = `lower(${col})`;
+  for (const [from, to] of ACCENT_MAP) {
+    expr = `replace(${expr},'${from}','${to}')`;
+  }
+  return expr;
+}
 
 function loHangPerm(perms: EffectivePerms): (typeof ROLE_PERMS)[Role] {
   const base = ROLE_PERMS[perms.role];
@@ -277,15 +306,13 @@ loHangRoutes.get('/', async (c) => {
     }
   }
 
-  // Free text search
+  // Free text search: apply unaccentSql in SQL for diacritic-insensitive matching
+  // (works correctly with LIMIT/pagination when added later).
   if (freeSearch) {
-    conditions.push(`(
-      lh.id LIKE ? OR kh.ten LIKE ? OR kh.ma_kh LIKE ? OR h.ten LIKE ?
-      OR x.so_xe LIKE ? OR x.bien_so LIKE ? OR t.ten LIKE ?
-      OR lh.ly_do_thieu LIKE ? OR cx.id LIKE ?
-    )`);
-    const like = `%${freeSearch}%`;
-    for (let i = 0; i < 9; i++) params.push(like);
+    const needle = `%${khongDau(freeSearch)}%`;
+    const cols = ['lh.id','kh.ten','kh.ma_kh','h.ten','x.so_xe','x.bien_so','t.ten','lh.ly_do_thieu','cx.id'];
+    conditions.push('(' + cols.map(col => `${unaccentSql(col)} LIKE ?`).join(' OR ') + ')');
+    for (let i = 0; i < cols.length; i++) params.push(needle);
   }
 
   const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -346,13 +373,14 @@ loHangRoutes.get('/', async (c) => {
     return bDate.localeCompare(aDate);
   });
 
-  // Default: expand only first (newest) chuyen and no-chuyen group
+  // Default: collapse all chuyen groups except the newest; persist in query param so toggles work
   const defaultCollapsed = collapsed.size === 0 && chuyenIds.length > 1;
   if (defaultCollapsed) {
     chuyenIds.forEach((cid, i) => {
       if (cid !== '_NO_CHUYEN_' && i > 0) collapsed.add(cid);
     });
   }
+  const collapsedParamEffective = Array.from(collapsed).join(',');
 
   // Totals
   let totalSoKien = 0, totalDaTra = 0;
@@ -402,6 +430,33 @@ loHangRoutes.get('/', async (c) => {
   // ─── Build HTML ────────────────────────────────────────────
   let html = '<div class="htql-dt" data-htql-dt>';
 
+  // Bulk action bar — light green background, hidden until rows are selected
+  html += `<div id="bulkBar" class="hidden htql-bulkbar">
+    <label class="flex items-center gap-2 font-semibold mr-2 cursor-pointer">
+      <input type="checkbox" id="bulkBarChk" class="rounded border-success" checked>
+      <span id="bulkCount">0 phiếu đã chọn:</span>
+    </label>
+    <button onclick="bulkAction('tra-hang')" class="htql-bulk-btn">📦 Đã trả hàng tất cả</button>
+    <button onclick="bulkThanhToan()" class="htql-bulk-btn">💰 Đã thanh toán</button>
+    <button onclick="bulkGanNguoiThu()" class="htql-bulk-btn">👤 Gán người thu</button>
+    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🚚 Lên xe (gán chuyến)</button>
+    <button onclick="bulkChuyenDaVe()" class="htql-bulk-btn">📅 Đã về (set ngày về)</button>
+    <button onclick="bulkAction('duplicate')" class="htql-bulk-btn">📋 Sao chép</button>
+    <button onclick="bulkExportCsv()" class="htql-bulk-btn">⬇ Export CSV</button>
+    <button onclick="bulkAction('print')" class="htql-bulk-btn">🏷 In nhãn</button>
+    <button onclick="bulkAction('delete')" class="htql-bulk-btn htql-bulk-danger">🗑 Xoá</button>
+    <button onclick="clearSelection()" class="htql-bulk-btn ml-auto">✕ Bỏ chọn tất cả</button>
+  </div>
+  <style>
+    .htql-bulkbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#e7f6ec;border:1px solid #b7e4c7;color:#1a7440;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px}
+    .dark .htql-bulkbar{background:#10271b;border-color:#1f5135;color:#7ee2a8}
+    .htql-bulk-btn{border:1px solid #b7e4c7;color:#1a7440;background:#fff;border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer}
+    .htql-bulk-btn:hover{background:#d7f0e0}
+    .dark .htql-bulk-btn{background:#0d1f15;border-color:#1f5135;color:#7ee2a8}
+    .htql-bulk-danger{border-color:#f2b8b5;color:#c0392b}
+    .htql-bulk-danger:hover{background:#fde8e6}
+  </style>`;
+
   // Toolbar
   html += '<div class="htql-dt-toolbar">';
   if (perm.canCreateLo) {
@@ -417,23 +472,23 @@ loHangRoutes.get('/', async (c) => {
   html += `<input type="hidden" name="fv" value="${esc(filterVal)}">`;
   html += `<input type="hidden" name="filters" value="${esc(filtersParam)}">`;
   html += `<input type="hidden" name="hide" value="${esc(hiddenCols)}">`;
-  html += `<input type="hidden" name="collapsed" value="${esc(collapsedParam)}">`;
+  html += `<input type="hidden" name="collapsed" value="${esc(collapsedParamEffective)}">`;
 
-  html += `<select name="range" onchange="this.form.submit()" class="htql-dt-select">
+  html += select({ name: 'range', onchange: 'this.form.submit()', class: 'w-auto', options: `
     <option value="today" ${filterRange==='today'?'selected':''}>Hôm nay</option>
     <option value="thisWeek" ${filterRange==='thisWeek'?'selected':''}>Tuần này</option>
     <option value="thisMonth" ${filterRange==='thisMonth'?'selected':''}>Tháng này</option>
     <option value="custom" ${filterRange==='custom'?'selected':''}>Tùy chọn</option>
     <option value="all" ${filterRange==='all'?'selected':''}>Tất cả</option>
-  </select>`;
+  ` });
 
   if (filterRange === 'custom') {
-    html += `<input type="date" name="from" value="${esc(customFrom)}" onchange="this.form.submit()" class="htql-dt-date">`;
+    html += input({ type: 'date', name: 'from', value: esc(customFrom), onchange: 'this.form.submit()', class: 'w-auto' });
     html += `<span class="text-bodytext dark:text-darklink text-sm">\u2192</span>`;
-    html += `<input type="date" name="to" value="${esc(customTo)}" onchange="this.form.submit()" class="htql-dt-date">`;
+    html += input({ type: 'date', name: 'to', value: esc(customTo), onchange: 'this.form.submit()', class: 'w-auto' });
   }
 
-  html += searchField({ value: freeSearch, placeholder: 'Tìm mã, khách, hãng, xe, tuyến...' });
+  html += searchField({ value: freeSearch, placeholder: 'Tìm mã, khách, hãng, xe, tuyến...', auto: true });
   html += `</form>`;
 
   html += `<button onclick="document.getElementById('colTogglePanel').classList.toggle('hidden')" class="htql-dt-btn">
@@ -464,7 +519,7 @@ loHangRoutes.get('/', async (c) => {
       <input type="hidden" name="q" value="${esc(freeSearch)}">
       <input type="hidden" name="fc" value="${esc(filterCol)}">
       <input type="hidden" name="fv" value="${esc(filterVal)}">
-      <input type="hidden" name="collapsed" value="${esc(collapsedParam)}">`;
+      <input type="hidden" name="collapsed" value="${esc(collapsedParamEffective)}">`;
   permCols.forEach(col => {
     const def = COL_DEFS[col];
     const checked = cols.includes(col);
@@ -539,15 +594,14 @@ loHangRoutes.get('/', async (c) => {
       return arr.length ? arr.join('<br>') : '\u2014';
     };
 
-    const isOpen = !collapsed.has(chuyenId);
-    const collapseToggle = collapsed.has(chuyenId)
-      ? `<a href="${buildGridUrl(c, { collapsed: collapsedParam ? collapsedParam.split(',').filter(x => x !== chuyenId).join(',') : '' })}" class="text-bodytext dark:text-darklink hover:text-primary no-underline" title="Mở">&#9654;</a>`
-      : `<a href="${buildGridUrl(c, { collapsed: (collapsedParam ? collapsedParam + ',' : '') + chuyenId })}" class="text-bodytext dark:text-darklink hover:text-primary no-underline" title="Thu gọn">&#9660;</a>`;
+    const isCollapsed = collapsed.has(chuyenId);
+    const toggleIcon = isCollapsed ? '&#9654;' : '&#9660;';
+    const toggleTitle = isCollapsed ? 'Mở' : 'Thu gọn';
 
     const firstLo = chLots[0];
 
-    html += `<tr class="htql-dt-group-row cursor-pointer" data-group-id="${esc(chuyenId)}">`;
-    html += `<td class="text-center">${collapseToggle}</td>`;
+    html += `<tr class="htql-dt-group-row cursor-pointer" data-group-id="${esc(chuyenId)}" data-collapsed="${isCollapsed ? 'true' : 'false'}" aria-expanded="${isCollapsed ? 'false' : 'true'}">`;
+    html += `<td class="text-center"><span class="htql-dt-group-toggle text-bodytext dark:text-darklink" title="${toggleTitle}" aria-hidden="true">${toggleIcon}</span></td>`;
     html += `<td class="text-center"><input type="checkbox" class="rounded border-bordergray group-check" data-chuyen="${esc(chuyenId)}" title="Chọn tất cả trong chuyến"></td>`;
     cols.forEach(col => {
       const def = COL_DEFS[col];
@@ -572,10 +626,10 @@ loHangRoutes.get('/', async (c) => {
     if (perm.canEdit) html += `<td></td>`;
     html += `</tr>`;
 
-    if (isOpen) {
-      chLots.forEach(lo => {
+    chLots.forEach(lo => {
         const luuKho = lo.so_kien - lo.da_tra_hang;
-        html += `<tr class="lo-row" data-lo-id="${esc(lo.id)}" data-group="${esc(chuyenId)}">`;
+        const childHiddenCls = isCollapsed ? ' htql-dt-child-hidden' : '';
+        html += `<tr class="lo-row${childHiddenCls}" data-lo-id="${esc(lo.id)}" data-group="${esc(chuyenId)}">`;
         html += `<td></td>`;
         html += `<td class="text-center"><input type="checkbox" class="rounded border-bordergray lo-check" value="${esc(lo.id)}"></td>`;
         cols.forEach(col => {
@@ -692,7 +746,6 @@ loHangRoutes.get('/', async (c) => {
         }
         html += `</tr>`;
       });
-    }
   });
 
   if (lots.length === 0) {
@@ -728,22 +781,7 @@ loHangRoutes.get('/', async (c) => {
 
   html += `</div>`;
 
-  // Bulk action bar
-  html += `<div id="bulkBar" class="hidden fixed bottom-0 left-0 right-0 bg-primary text-white px-4 py-3 flex flex-wrap items-center gap-2 z-50 shadow-lg">
-    <span id="bulkCount" class="font-semibold mr-2">0 phiếu:</span>
-    <button onclick="bulkAction('tra-hang')" class="htql-bulk-btn">📦 Đã trả hàng</button>
-    <button onclick="bulkThanhToan()" class="htql-bulk-btn">💰 Đã thanh toán</button>
-    <button onclick="bulkGanNguoiThu()" class="htql-bulk-btn">👤 Gán người thu</button>
-    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🚛 Lên xe (gán chuyến)</button>
-    <button onclick="bulkChuyenDaVe()" class="htql-bulk-btn">📅 Đã về</button>
-    <button onclick="bulkAction('duplicate')" class="htql-bulk-btn">📋 Sao chép</button>
-    <button onclick="bulkGanChuyen()" class="htql-bulk-btn">🔀 Move chuyến</button>
-    <button onclick="bulkExportCsv()" class="htql-bulk-btn">⬇ Export CSV</button>
-    <button onclick="bulkAction('print')" class="htql-bulk-btn">🏷 In nhãn</button>
-    <button onclick="bulkAction('delete')" class="htql-bulk-btn" style="background:rgba(255,80,80,0.25)">🗑 Xoá</button>
-    <button onclick="clearSelection()" class="htql-bulk-btn ml-auto">✕ Bỏ chọn</button>
-  </div>
-  <style>.htql-bulk-btn{border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:4px 10px;font-size:13px;background:rgba(255,255,255,0.1)}.htql-bulk-btn:hover{background:rgba(255,255,255,0.25)}</style>`;
+  // Bulk bar is rendered above the toolbar (#bulkBar)
 
   // Client-side scripts
   html += `<script>
@@ -799,10 +837,16 @@ loHangRoutes.get('/', async (c) => {
     if (selected.length > 0) {
       bar.classList.remove('hidden');
       count.textContent = selected.length + ' phiếu đã chọn:';
+      const bc = document.getElementById('bulkBarChk'); if (bc) bc.checked = true;
     } else {
       bar.classList.add('hidden');
     }
   }
+
+  // Bulk bar master checkbox: uncheck clears all selections
+  document.getElementById('bulkBarChk')?.addEventListener('change', function() {
+    if (!this.checked) clearSelection();
+  });
 
   function clearSelection() {
     document.querySelectorAll('.lo-check').forEach(cb => cb.checked = false);
@@ -951,11 +995,13 @@ loHangRoutes.get('/', async (c) => {
   };
 
   window.importPreview = null;
+  window.importExcelB64 = null;
   function openImportModal() {
     htqlOpenModal('importModal');
     document.getElementById('importPreview').innerHTML = '';
     document.getElementById('importText').value = '';
     window.importPreview = null;
+    window.importExcelB64 = null;
     const input = document.getElementById('importFile');
     if (input) input.value = '';
     const nameEl = document.getElementById('importFileName');
@@ -977,11 +1023,15 @@ loHangRoutes.get('/', async (c) => {
   async function parseImport() {
     const type = getImportType();
     const text = document.getElementById('importText').value.trim();
-    if (!text) { alert('Dán dữ liệu hoặc chọn file CSV/TSV'); return; }
+    const excelB64 = window.importExcelB64 || '';
+    if (!text && !excelB64) { alert('Chọn file Excel (.xlsx) hoặc dán dữ liệu từ Excel'); return; }
+    const payload = { type };
+    if (excelB64) payload.excelBase64 = excelB64;
+    else payload.text = text;
     const res = await fetch('/lo-hang/api/import/parse', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ type, text })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Lỗi'); return; }
@@ -1029,27 +1079,28 @@ loHangRoutes.get('/', async (c) => {
       alert(data.error || 'Lỗi import');
     }
   }
-  function applyImportFileContent(text) {
-    const ta = document.getElementById('importText');
-    if (!ta) return;
-    ta.value = text;
-    const pasteArea = document.getElementById('importPasteArea');
-    const toggle = document.getElementById('importPasteToggle');
-    if (pasteArea) {
-      pasteArea.classList.remove('hidden');
-      if (toggle) toggle.textContent = 'Ẩn nhập thủ công';
-    }
-    document.getElementById('importPreview').innerHTML = '';
-    window.importPreview = null;
-    const btn = document.getElementById('importConfirmBtn');
-    if (btn) btn.disabled = true;
-  }
   function readImportFile(file) {
     if (!file) return;
+    const name = (file.name || '').toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+      alert('Chỉ hỗ trợ file Excel (.xlsx, .xls)');
+      return;
+    }
     const r = new FileReader();
-    r.onload = () => applyImportFileContent(String(r.result ?? ''));
+    r.onload = function() {
+      const bytes = new Uint8Array(r.result);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      window.importExcelB64 = btoa(binary);
+      document.getElementById('importText').value = '';
+      document.getElementById('importPreview').innerHTML = '';
+      window.importPreview = null;
+      const btn = document.getElementById('importConfirmBtn');
+      if (btn) btn.disabled = true;
+      parseImport();
+    };
     r.onerror = () => alert('Không đọc được file');
-    r.readAsText(file);
+    r.readAsArrayBuffer(file);
   }
 
   // ── Bulk "Paid" modal ──
@@ -1104,26 +1155,19 @@ loHangRoutes.get('/', async (c) => {
     <div class="bg-white dark:bg-darkgray rounded-lg shadow-xl w-full max-w-md p-5">
       <h3 class="text-lg font-semibold mb-3 text-dark dark:text-white">💰 Đã thanh toán <span id="bulkTTCount" class="text-primary">0</span> phiếu</h3>
       <div class="space-y-3">
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Loại tiền thu</label>
-          <select id="bulkTTLoai" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:bg-darkgray dark:border-darkborder">
+        ${formField('Loại tiền thu', select({ id: 'bulkTTLoai', options: `
             <option value="vantai">Vận tải (thành tiền)</option>
             <option value="tienhang">Tiền hàng</option>
             <option value="ca-hai">Cả hai (tạo 2 nhóm phiếu thu)</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Ngày thu</label>
-          <input type="date" id="bulkTTNgay" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:bg-darkgray dark:border-darkborder">
+          ` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Ngày thu', `
+          ${input({ type: 'date', id: 'bulkTTNgay' })}
           <p id="bulkTTWarn" class="hidden text-xs text-error mt-1">⚠ Ngày quá khứ — sẽ làm thay đổi số dư/chốt sổ các ngày sau.</p>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Hình thức</label>
-          <select id="bulkTTHinhThuc" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:bg-darkgray dark:border-darkborder">
+        `, { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Hình thức', select({ id: 'bulkTTHinhThuc', options: `
             <option value="TM">Tiền mặt</option>
             <option value="CK">Chuyển khoản</option>
-          </select>
-        </div>
+          ` }), { labelClass: FILTER_LABEL_CLASS })}
         <div id="bulkTTNgoaiWrap" class="hidden border-t pt-3">
           <label class="flex items-start gap-2 text-sm">
             <input type="checkbox" id="bulkTTNgoai" class="mt-0.5 rounded border-gray-300">
@@ -1177,10 +1221,10 @@ loHangRoutes.get('/', async (c) => {
           </div>
           <div>
             <label id="importDropzone" class="htql-import-dropzone">
-              <input type="file" id="importFile" accept=".csv,.tsv,.txt,text/csv,text/plain" tabindex="-1">
+              <input type="file" id="importFile" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" tabindex="-1">
               <div class="pointer-events-none">
                 <iconify-icon icon="solar:cloud-upload-linear" class="text-bodytext dark:text-darklink" style="font-size:36px"></iconify-icon>
-                <p class="htql-import-dropzone-text">Kéo thả file CSV/TSV vào đây</p>
+                <p class="htql-import-dropzone-text">Kéo thả file Excel (.xlsx) vào đây</p>
                 <p class="htql-import-dropzone-hint">hoặc dán từ Excel (Ctrl+V) · click để chọn file</p>
                 <p id="importFileName" class="htql-import-file-name hidden break-all"></p>
               </div>
@@ -1267,19 +1311,30 @@ loHangRoutes.get('/', async (c) => {
           pasteArea.classList.remove('hidden');
           document.getElementById('importPasteToggle').textContent = 'Ẩn nhập thủ công';
         }
+        window.importExcelB64 = null;
       }
     });
+    var importTextEl = document.getElementById('importText');
+    if (importTextEl) {
+      importTextEl.addEventListener('input', function() {
+        window.importExcelB64 = null;
+      });
+    }
     // Enhance parseImport preview rendering (override)
     (function() {
       var _origParseImport = window.parseImport;
       window.parseImport = async function() {
         var type = getImportType();
         var text = document.getElementById('importText').value.trim();
-        if (!text) { alert('Dán dữ liệu hoặc chọn file CSV/TSV'); return; }
+        var excelB64 = window.importExcelB64 || '';
+        if (!text && !excelB64) { alert('Chọn file Excel (.xlsx) hoặc dán dữ liệu từ Excel'); return; }
+        var payload = { type: type };
+        if (excelB64) payload.excelBase64 = excelB64;
+        else payload.text = text;
         var res = await fetch('/lo-hang/api/import/parse', {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ type: type, text: text })
+          body: JSON.stringify(payload)
         });
         var data = await res.json();
         if (!res.ok) { alert(data.error || 'Lỗi'); return; }
@@ -1374,68 +1429,18 @@ loHangRoutes.get('/create', async (c) => {
   html += `<div class="bg-white rounded-lg shadow p-6">
     <h2 class="text-lg font-bold text-gray-900 mb-4">Tạo phiếu mới</h2>
     <form id="createForm" class="grid grid-cols-2 sm:grid-cols-3 gap-4" onsubmit="return createLo(event)">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Chuyến xe</label>
-        <select name="chuyen_xe_id" id="chuyenSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chưa có chuyến (DK) --</option>${cxOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Khách hàng <span class="text-red-500">*</span></label>
-        <select name="khach_hang_id" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chọn KH --</option>${khOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Hãng <span class="text-red-500">*</span></label>
-        <select name="hang_id" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chọn hãng --</option>${hangOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Số kiện</label>
-        <input type="number" name="so_kien" value="1" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" oninput="calcThanhTien()">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Đơn giá</label>
-        <input type="number" name="don_gia" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" oninput="calcThanhTien()">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Tiền tệ</label>
-        <select name="tien_te" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="PLN">PLN</option>
-          <option value="EUR">EUR</option>
-          <option value="USD">USD</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Thành tiền (tự tính)</label>
-        <input type="number" name="thanh_tien" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50" readonly>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Số tiền hàng</label>
-        <input type="number" name="so_tien_hang" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Giảm giá</label>
-        <input type="number" name="giam_gia" value="0" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" oninput="calcThanhTien()">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Người tạo</label>
-        <select name="nguoi_tao" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chọn --</option>${nvOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Người thu</label>
-        <select name="nguoi_thu" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-          <option value="">-- Chọn --</option>${nvOptions}
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
-        <input type="text" name="ly_do_thieu" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-      </div>
+      ${formField('Chuyến xe', select({ name: 'chuyen_xe_id', id: 'chuyenSelect', options: `<option value="">-- Chưa có chuyến (DK) --</option>${cxOptions}` }))}
+      ${formField('Khách hàng', select({ name: 'khach_hang_id', required: true, options: `<option value="">-- Chọn KH --</option>${khOptions}` }), { required: true })}
+      ${formField('Hãng', select({ name: 'hang_id', required: true, options: `<option value="">-- Chọn hãng --</option>${hangOptions}` }), { required: true })}
+      ${formField('Số kiện', input({ type: 'number', name: 'so_kien', value: '1', min: '0', oninput: 'calcThanhTien()' }))}
+      ${formField('Đơn giá', input({ type: 'number', name: 'don_gia', value: '0', step: '0.01', oninput: 'calcThanhTien()' }))}
+      ${formField('Tiền tệ', select({ name: 'tien_te', options: '<option value="PLN">PLN</option><option value="EUR">EUR</option><option value="USD">USD</option>' }))}
+      ${formField('Thành tiền (tự tính)', input({ type: 'number', name: 'thanh_tien', value: '0', step: '0.01', class: 'bg-lightgray dark:bg-darkgray', readonly: true }))}
+      ${formField('Số tiền hàng', input({ type: 'number', name: 'so_tien_hang', value: '0', step: '0.01' }))}
+      ${formField('Giảm giá', input({ type: 'number', name: 'giam_gia', value: '0', step: '0.01', oninput: 'calcThanhTien()' }))}
+      ${formField('Người tạo', select({ name: 'nguoi_tao', options: `<option value="">-- Chọn --</option>${nvOptions}` }))}
+      ${formField('Người thu', select({ name: 'nguoi_thu', options: `<option value="">-- Chọn --</option>${nvOptions}` }))}
+      ${formField('Ghi chú', input({ type: 'text', name: 'ly_do_thieu' }))}
       <div class="col-span-2 sm:col-span-3 flex gap-2 pt-2">
         <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium cursor-pointer">Tạo phiếu</button>
         <a href="/lo-hang" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm">Hủy</a>
@@ -1624,71 +1629,24 @@ loHangRoutes.get('/:id', async (c) => {
       </button>
       <form id="editForm" class="hidden grid grid-cols-2 sm:grid-cols-3 gap-4" onsubmit="return saveEdit(event)">
         <input type="hidden" name="id" value="${esc(lo.id)}">
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Khách hàng</label>
-          <select name="khach_hang_id" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">-- Chọn KH --</option>${khOptions}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Hãng</label>
-          <select name="hang_id" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">-- Chọn hãng --</option>${hangOptions}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Chuyến xe</label>
-          <select name="chuyen_xe_id" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">-- Chọn chuyến --</option>${cxOptions}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Số kiện</label>
-          <input type="number" name="so_kien" value="${lo.so_kien}" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Đã trả hàng</label>
-          <input type="number" name="da_tra_hang" value="${lo.da_tra_hang}" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Đơn giá</label>
-          <input type="number" name="don_gia" value="${lo.don_gia}" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Tiền tệ</label>
-          <select name="tien_te" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+        ${formField('Khách hàng', select({ name: 'khach_hang_id', options: `<option value="">-- Chọn KH --</option>${khOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Hãng', select({ name: 'hang_id', options: `<option value="">-- Chọn hãng --</option>${hangOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Chuyến xe', select({ name: 'chuyen_xe_id', options: `<option value="">-- Chọn chuyến --</option>${cxOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Số kiện', input({ type: 'number', name: 'so_kien', value: String(lo.so_kien), min: '0' }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Đã trả hàng', input({ type: 'number', name: 'da_tra_hang', value: String(lo.da_tra_hang), min: '0' }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Đơn giá', input({ type: 'number', name: 'don_gia', value: String(lo.don_gia), step: '0.01' }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Tiền tệ', select({ name: 'tien_te', options: `
             <option value="PLN" ${lo.tien_te==='PLN'?'selected':''}>PLN</option>
             <option value="EUR" ${lo.tien_te==='EUR'?'selected':''}>EUR</option>
             <option value="USD" ${lo.tien_te==='USD'?'selected':''}>USD</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Thành tiền</label>
-          <input type="number" name="thanh_tien" value="${lo.thanh_tien}" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        ${perm.canEditTienHang ? `<div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Số tiền hàng</label>
-          <input type="number" name="so_tien_hang" value="${lo.so_tien_hang}" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>` : ''}
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Giảm giá</label>
-          <input type="number" name="giam_gia" value="${lo.giam_gia}" step="0.01" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Người tạo</label>
-          <select name="nguoi_tao" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">-- Chọn --</option>${nvTaoOptions}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Người thu</label>
-          <select name="nguoi_thu" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="">-- Chọn --</option>${nvThuOptions}
-          </select>
-        </div>
+          ` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Thành tiền', input({ type: 'number', name: 'thanh_tien', value: String(lo.thanh_tien), step: '0.01' }), { labelClass: FILTER_LABEL_CLASS })}
+        ${perm.canEditTienHang ? formField('Số tiền hàng', input({ type: 'number', name: 'so_tien_hang', value: String(lo.so_tien_hang), step: '0.01' }), { labelClass: FILTER_LABEL_CLASS }) : ''}
+        ${formField('Giảm giá', input({ type: 'number', name: 'giam_gia', value: String(lo.giam_gia), step: '0.01' }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Người tạo', select({ name: 'nguoi_tao', options: `<option value="">-- Chọn --</option>${nvTaoOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Người thu', select({ name: 'nguoi_thu', options: `<option value="">-- Chọn --</option>${nvThuOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
         <div class="col-span-2 sm:col-span-3">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Lý do thiếu / Ghi chú</label>
-          <input type="text" name="ly_do_thieu" value="${esc(lo.ly_do_thieu)}" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          ${formField('Lý do thiếu / Ghi chú', input({ type: 'text', name: 'ly_do_thieu', value: esc(lo.ly_do_thieu) }), { labelClass: FILTER_LABEL_CLASS })}
         </div>
         <div class="col-span-2 sm:col-span-3 flex gap-2">
           <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm cursor-pointer">Lưu thay đổi</button>
@@ -2131,10 +2089,10 @@ loHangRoutes.get('/api/import/template/:type', async (c) => {
   if (!perm.canCreateLo) return c.json({ error: 'Forbidden' }, 403);
   const type = c.req.param('type') as ImportType;
   if (!['kh', 'hang', 'cty', 'phieu'].includes(type)) return c.json({ error: 'Invalid type' }, 400);
-  const tpl = csvTemplate(type);
-  return new Response(tpl.content, {
+  const tpl = excelTemplate(type);
+  return new Response(tpl.buffer, {
     headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${tpl.filename}"`,
     },
   });
@@ -2145,11 +2103,15 @@ loHangRoutes.post('/api/import/parse', async (c) => {
   const perm = loHangPerm(c.get('perms'));
   if (!perm.canCreateLo) return c.json({ error: 'Forbidden' }, 403);
 
-  const body = await c.req.json<{ type: ImportType; text: string; importDate?: string }>();
+  const body = await c.req.json<{ type: ImportType; text?: string; excelBase64?: string; importDate?: string }>();
   const type = body.type;
-  if (!type || !body.text) return c.json({ error: 'Thiếu type hoặc text' }, 400);
+  if (!type || (!body.text && !body.excelBase64)) {
+    return c.json({ error: 'Thiếu type hoặc dữ liệu import' }, 400);
+  }
 
-  const parsed = parseDelimitedText(body.text);
+  const parsed = body.excelBase64
+    ? parseExcelBase64(body.excelBase64)
+    : parseDelimitedText(body.text || '');
   if (parsed.rows.length === 0) return c.json({ error: 'Không có dòng dữ liệu' }, 400);
 
   const ctx = await loadImportContext(c.env.DB);

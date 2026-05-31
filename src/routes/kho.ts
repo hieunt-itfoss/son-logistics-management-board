@@ -3,7 +3,7 @@ import type { Env, AppVariables } from '../types';
 import { layout } from '../utils/layout';
 import {
   pageHeader, card, dataTable, tableRow, tableEmpty, tableActions,
-  formGroup, input, btnPrimary, btnSecondary, badge,
+  formGroup, input, select, btnPrimary, btnSecondary, badge,
 } from '../utils/ui';
 
 export const khoRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
@@ -150,7 +150,7 @@ khoRoutes.get('/', async (c) => {
         <span class="text-xs font-semibold text-warning uppercase flex items-center gap-1">
           <iconify-icon icon="solar:sort-by-alphabet-linear" width="16"></iconify-icon> Sắp xếp
         </span>
-        <select name="sort" class="form-control w-auto">${sortSelect}</select>
+        ${select({ name: 'sort', class: 'w-auto', options: sortSelect })}
         <span class="text-xs text-bodytext dark:text-darklink ml-2">Đơn giá lưu kho/kiện/ngày:</span>
         <input type="number" name="dg" value="${dgKho}" step="0.5" min="0" class="form-control w-20" />
         <span class="text-xs text-bodytext">PLN</span>

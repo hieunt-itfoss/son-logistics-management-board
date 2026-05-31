@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, NhanVien, VaiTro, AppVariables } from '../types';
 import { layout } from '../utils/layout';
-import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, tableActions, btnPrimary, searchField } from '../utils/ui';
+import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, tableActions, btnPrimary, searchField, formField, input, select, textarea } from '../utils/ui';
 
 export const nhanVienRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -114,7 +114,7 @@ nhanVienRoutes.get('/', async (c) => {
     <form method="GET" action="/nhan-vien" class="mb-4">
       <div class="flex items-center gap-2">
         ${filterRole ? `<input type="hidden" name="vai_tro" value="${filterRole}">` : ''}
-        ${searchField({ value: escapeHtml(search), placeholder: 'Tìm theo tên, mã, SĐT...' })}
+        ${searchField({ value: escapeHtml(search), placeholder: 'Tìm theo tên, mã, SĐT...', auto: true })}
         ${search ? `<a href="/nhan-vien${filterRole ? '?vai_tro=' + filterRole : ''}" class="htql-dt-btn">✕</a>` : ''}
       </div>
     </form>
@@ -194,42 +194,17 @@ function nvFormHtml(
 
       <div class="bg-white rounded-xl border border-gray-200 p-6">
         <form id="nvForm" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Mã NV</label>
-            <input type="text" name="id" value="${escapeHtml(id)}" ${isEdit ? 'readonly' : 'required'}
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm ${isEdit ? 'bg-gray-100 text-gray-500' : ''} focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Họ tên <span class="text-red-500">*</span></label>
-            <input type="text" name="ten" value="${escapeHtml(ten)}" required
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Vai trò</label>
-            <select name="vai_tro"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-              ${roleOptions}
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">SĐT</label>
-            <input type="text" name="sdt" value="${escapeHtml(sdt)}" placeholder="+48 ..."
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Số giấy tờ</label>
-            <input type="text" name="so_giay_to" value="${escapeHtml(soGiayTo)}" placeholder="PESEL ..."
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Địa chỉ</label>
-            <input type="text" name="dia_chi" value="${escapeHtml(diaChi)}"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          </div>
+          ${formField('Mã NV', input({
+            type: 'text', name: 'id', value: escapeHtml(id),
+            ...(isEdit ? { readonly: true, class: 'bg-lightgray dark:bg-darkgray text-bodytext' } : { required: true }),
+          }), { required: !isEdit })}
+          ${formField('Họ tên', input({ type: 'text', name: 'ten', value: escapeHtml(ten), required: true }), { required: true })}
+          ${formField('Vai trò', select({ name: 'vai_tro', options: roleOptions }))}
+          ${formField('SĐT', input({ type: 'text', name: 'sdt', value: escapeHtml(sdt), placeholder: '+48 ...' }))}
+          ${formField('Số giấy tờ', input({ type: 'text', name: 'so_giay_to', value: escapeHtml(soGiayTo), placeholder: 'PESEL ...' }))}
+          ${formField('Địa chỉ', input({ type: 'text', name: 'dia_chi', value: escapeHtml(diaChi) }))}
           <div class="sm:col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
-            <textarea name="ghi_chu" rows="2"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">${escapeHtml(ghiChu)}</textarea>
+            ${formField('Ghi chú', textarea({ name: 'ghi_chu', rows: 2, value: escapeHtml(ghiChu) }))}
           </div>
           <div class="sm:col-span-2 flex gap-3 pt-2">
             <button type="submit"

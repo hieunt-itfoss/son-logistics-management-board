@@ -187,6 +187,7 @@ export function layout(
   <script src="/assets/js/app.init.js"></script>
   <script src="/assets/js/htql-modal.js"></script>
   <script src="/assets/js/htql-table.js"></script>
+  <script src="/assets/js/htql-combobox.js"></script>
   <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
   <script>
     /* ── Sidebar toggle ─────────────────────────────────── */
