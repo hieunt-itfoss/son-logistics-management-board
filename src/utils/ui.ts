@@ -282,9 +282,17 @@ export function btnSecondary(
   return `<button type="${type}" class="btn-outline border-bordergray text-link dark:text-darklink cursor-pointer"${onclick}>${label}</button>`;
 }
 
-export function btnDanger(label: string, opts?: { onclick?: string }): string {
+export function btnDanger(
+  label: string,
+  opts?: { type?: string; onclick?: string; icon?: string; class?: string },
+): string {
+  const type = opts?.type ?? "button";
   const onclick = opts?.onclick ? ` onclick="${opts.onclick}"` : "";
-  return `<button type="button" class="btn-error cursor-pointer"${onclick}>${label}</button>`;
+  const icon = opts?.icon
+    ? `<iconify-icon icon="${opts.icon}" class="text-lg"></iconify-icon>`
+    : "";
+  const extra = opts?.class ? ` ${opts.class}` : "";
+  return `<button type="${type}" class="btn bg-error hover:bg-erroremphasis text-white flex items-center gap-2 cursor-pointer${extra}"${onclick}>${icon}${label}</button>`;
 }
 
 /** Standard form-control classes — use in client-side templates when needed */

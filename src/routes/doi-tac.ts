@@ -18,6 +18,7 @@ import {
   textarea,
   searchField,
 } from '../utils/ui';
+import { resolveTienTeTh } from '../utils/finance';
 
 export const doiTacRoutes = new Hono<{ Bindings: Env }>();
 
@@ -36,7 +37,7 @@ function fmtNum(n: number): string {
 }
 
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return '—';
+  if (!d) return '';
   const parts = d.split('-');
   if (parts.length !== 3) return d;
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -44,14 +45,81 @@ function fmtDate(d: string | null | undefined): string {
 
 function fmtCcyMap(m: Record<string, number>, sep = '<br>'): string {
   const entries = Object.entries(m).filter(([, v]) => v);
-  if (entries.length === 0) return '—';
+  if (entries.length === 0) return '';
   return entries.map(([t, v]) => `<span class="num">${fmtNum(v)} ${t}</span>`).join(sep);
 }
 
 function fmtTotMap(m: Record<string, number>): string {
   const entries = Object.entries(m);
-  if (entries.length === 0) return '—';
+  if (entries.length === 0) return '';
   return entries.map(([t, v]) => `${fmtNum(v)} ${t}`).join(', ');
+}
+
+const PAGE_SIZES = [10, 50, 100] as const;
+
+function parsePageSize(raw: string | undefined): number {
+  const n = Number(raw);
+  return (PAGE_SIZES as readonly number[]).includes(n) ? n : 50;
+}
+
+function parsePage(raw: string | undefined): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
+
+function paginate<T>(items: T[], page: number, per: number): {
+  pageItems: T[]; total: number; page: number; pages: number; per: number;
+} {
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / per) || 1);
+  const p = Math.min(Math.max(1, page), pages);
+  const start = (p - 1) * per;
+  return { pageItems: items.slice(start, start + per), total, page: p, pages, per };
+}
+
+function pagingBar(opts: {
+  sub: string;
+  sort?: string;
+  search: string;
+  page: number;
+  pages: number;
+  per: number;
+  total: number;
+}): string {
+  const qs = (page: number, per: number) => {
+    const p = new URLSearchParams();
+    p.set('sub', opts.sub);
+    if (opts.sort) p.set('sort', opts.sort);
+    if (opts.search) p.set('q', opts.search);
+    p.set('page', String(page));
+    p.set('per', String(per));
+    return `/doi-tac?${p.toString()}`;
+  };
+  const perOpts = PAGE_SIZES.map(
+    (n) => `<option value="${n}"${n === opts.per ? ' selected' : ''}>${n} / trang</option>`,
+  ).join('');
+  const prevDisabled = opts.page <= 1;
+  const nextDisabled = opts.page >= opts.pages;
+  return `
+    <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-light-dark text-sm">
+      <span class="text-bodytext dark:text-darklink">
+        Hiển thị ${(opts.total === 0 ? 0 : (opts.page - 1) * opts.per + 1)}–${Math.min(opts.page * opts.per, opts.total)} / ${opts.total}
+      </span>
+      <div class="flex flex-wrap items-center gap-2">
+        <form method="GET" action="/doi-tac" class="flex items-center gap-2">
+          <input type="hidden" name="sub" value="${esc(opts.sub)}">
+          ${opts.sort ? `<input type="hidden" name="sort" value="${esc(opts.sort)}">` : ''}
+          ${opts.search ? `<input type="hidden" name="q" value="${esc(opts.search)}">` : ''}
+          <input type="hidden" name="page" value="1">
+          ${select({ name: 'per', class: 'w-auto', onchange: 'this.form.submit()', options: perOpts })}
+        </form>
+        <a href="${prevDisabled ? '#' : qs(opts.page - 1, opts.per)}"
+           class="btn-outline border-bordergray text-link dark:text-darklink text-sm px-3 py-1.5 ${prevDisabled ? 'opacity-40 pointer-events-none' : ''}">← Trước</a>
+        <span class="text-bodytext dark:text-darklink tabular-nums">Trang ${opts.page}/${opts.pages}</span>
+        <a href="${nextDisabled ? '#' : qs(opts.page + 1, opts.per)}"
+           class="btn-outline border-bordergray text-link dark:text-darklink text-sm px-3 py-1.5 ${nextDisabled ? 'opacity-40 pointer-events-none' : ''}">Sau →</a>
+      </div>
+    </div>`;
 }
 
 const DM_GROUP_LABEL: Record<string, string> = {
@@ -100,6 +168,8 @@ doiTacRoutes.get('/', async (c) => {
   const sub = c.req.query('sub') || 'khach';
   const sort = c.req.query('sort') || 'abc';
   const q = c.req.query('q') || '';
+  const page = parsePage(c.req.query('page'));
+  const per = parsePageSize(c.req.query('per'));
   const db = c.env.DB;
 
   const [khCountR, hangCountR, ctyCountR] = await Promise.all([
@@ -117,11 +187,11 @@ doiTacRoutes.get('/', async (c) => {
   let body = '';
 
   if (sub === 'khach') {
-    body = await renderKhachList(db, sort, q);
+    body = await renderKhachList(db, sort, q, page, per);
   } else if (sub === 'hang') {
-    body = await renderHangList(db, sort, q);
+    body = await renderHangList(db, sort, q, page, per);
   } else {
-    body = await renderCtyList(db, q);
+    body = await renderCtyList(db, q, page, per);
   }
 
   // Modal containers + client-side JS
@@ -320,7 +390,7 @@ interface CongNoDM {
 
 interface CanhBaoInfo { qua_han: number; }
 
-async function renderKhachList(db: D1Database, sort: string, search: string): Promise<string> {
+async function renderKhachList(db: D1Database, sort: string, search: string, page: number, per: number): Promise<string> {
   const { results: khList } = await db.prepare(
     `SELECT k.*, bg.don_gia as bg_don_gia, bg.tien_te as bg_tien_te
      FROM khach_hang k
@@ -381,7 +451,7 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
 
       const soTienHang = Number(lo.so_tien_hang || 0);
       if (soTienHang > 0) {
-        const tienTeTH = String(lo.tien_te_th || lo.tien_te || 'PLN');
+        const tienTeTH = resolveTienTeTh(lo.tien_te_th, lo.tien_te);
         const kTH = `${dauMuc} (TH)|${tienTeTH}`;
         if (!mucs[kTH]) mucs[kTH] = { dau_muc: `${dauMuc} (Tiền hàng)`, tte: tienTeTH, phai_thu: 0, da_thu: 0, con_no: 0, is_th: true };
         mucs[kTH].phai_thu += soTienHang;
@@ -499,32 +569,41 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
   const tongAllNoTH: Record<string, number> = {};
   let tongAllPhiKho = 0;
 
-  const rows = sorted.map(kh => {
+  for (const kh of sorted) {
+    const noVT = khNoVT.get(kh.id) || {};
+    const noTH = khNoTH.get(kh.id) || {};
+    const phiKho = khPhiKho.get(kh.id) || 0;
+    tongAllPhiKho += phiKho;
+    for (const [t, v] of Object.entries(noVT)) { tongAllNoVT[t] = (tongAllNoVT[t] || 0) + v; tongAllNo[t] = (tongAllNo[t] || 0) + v; }
+    for (const [t, v] of Object.entries(noTH)) { tongAllNoTH[t] = (tongAllNoTH[t] || 0) + v; tongAllNo[t] = (tongAllNo[t] || 0) + v; }
+    if (phiKho > 0) tongAllNo['PLN'] = (tongAllNo['PLN'] || 0) + phiKho;
+  }
+
+  const pg = paginate(sorted, page, per);
+
+  const rows = pg.pageItems.map(kh => {
     const dg = dgAuto(kh);
     const noVT = khNoVT.get(kh.id) || {};
     const noTH = khNoTH.get(kh.id) || {};
     const stock = khStock.get(kh.id) || 0;
     const phiKho = khPhiKho.get(kh.id) || 0;
-    tongAllPhiKho += phiKho;
 
     const tongAll: Record<string, number> = {};
-    for (const [t, v] of Object.entries(noVT)) { tongAll[t] = (tongAll[t] || 0) + v; tongAllNoVT[t] = (tongAllNoVT[t] || 0) + v; }
-    for (const [t, v] of Object.entries(noTH)) { tongAll[t] = (tongAll[t] || 0) + v; tongAllNoTH[t] = (tongAllNoTH[t] || 0) + v; }
-    if (phiKho > 0) { tongAll['PLN'] = (tongAll['PLN'] || 0) + phiKho; }
-    for (const [t, v] of Object.entries(tongAll)) { tongAllNo[t] = (tongAllNo[t] || 0) + v; }
+    for (const [t, v] of Object.entries(noVT)) tongAll[t] = (tongAll[t] || 0) + v;
+    for (const [t, v] of Object.entries(noTH)) tongAll[t] = (tongAll[t] || 0) + v;
+    if (phiKho > 0) tongAll['PLN'] = (tongAll['PLN'] || 0) + phiKho;
 
     const cb = khCanhBao.get(kh.id);
     const cbBadge = cb ? canhBaoTag(cb.qua_han) : '';
 
     const bgKh = kh as KhachRow & { bg_don_gia: number | null; bg_tien_te: string | null };
-    const bgStr = bgKh.bg_don_gia ? `${fmtNum(bgKh.bg_don_gia)} ${bgKh.bg_tien_te}` : '—';
+    const bgStr = bgKh.bg_don_gia ? `${fmtNum(bgKh.bg_don_gia)} ${bgKh.bg_tien_te}` : '';
 
     const isOver = Object.values(tongAll).some(v => v > 0);
     const tongAllStr = Object.entries(tongAll).length === 0
       ? '0'
       : Object.entries(tongAll).map(([t, v]) => `<strong>${fmtNum(v)} ${t}</strong>`).join('<br>');
 
-    // Data to build reconciliation text on the client (bulk copy/print/Viber)
     const dsData = {
       ten: kh.ten,
       ma: kh.ma_kh,
@@ -541,22 +620,22 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
       `<span class="font-mono font-medium">${esc(kh.ma_kh)}</span>`,
       `<a href="/doi-tac/khach-hang/${kh.id}" class="text-primary hover:underline font-medium">${esc(kh.ten)}</a>`,
       dgBadge(dg),
-      cbBadge || '—',
-      esc(kh.nip || '—'),
+      cbBadge || '',
+      esc(kh.nip || ''),
       `<span class="font-medium">${esc((kh as KhachRow & { tien_te?: string }).tien_te || 'PLN')}</span>`,
       `<span class="text-right block">${kh.han_tt || 30}d</span>`,
       `<span class="text-right block">${bgStr}</span>`,
       `<span class="text-right block ${stock > 0 ? 'text-primary font-medium' : ''}">${stock > 0 ? stock : '0'}</span>`,
       `<span class="text-right block ${Object.keys(noVT).length ? 'text-error font-medium' : ''}">${fmtCcyMap(noVT)}</span>`,
       `<span class="text-right block ${Object.keys(noTH).length ? 'text-error font-medium' : ''}">${fmtCcyMap(noTH)}</span>`,
-      `<span class="text-right block ${phiKho > 0 ? 'text-primary' : ''}">${phiKho > 0 ? `${fmtNum(phiKho)} PLN` : '—'}</span>`,
+      `<span class="text-right block ${phiKho > 0 ? 'text-primary' : ''}">${phiKho > 0 ? `${fmtNum(phiKho)} PLN` : ''}</span>`,
       `<span class="text-right block ${isOver ? 'text-error font-bold' : ''}">${tongAllStr}</span>`,
       tableActions(`openKhModal('${kh.id}')`),
     ]);
   }).join('');
 
   const tongStr = Object.entries(tongAllNo).map(([t, v]) => `${fmtNum(v)} ${t}`).join(' · ');
-  const fmtTotM = (m: Record<string, number>) => Object.entries(m).length === 0 ? '—' : Object.entries(m).map(([t, v]) => `${fmtNum(v)} ${t}`).join(', ');
+  const fmtTotM = (m: Record<string, number>) => Object.entries(m).length === 0 ? '' : Object.entries(m).map(([t, v]) => `${fmtNum(v)} ${t}`).join(', ');
 
   return `
     <div class="card overflow-hidden">
@@ -564,6 +643,8 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
         ${btnPrimary('Khách mới', { icon: 'solar:add-circle-linear', onclick: 'openKhModal()' })}
         <form method="GET" action="/doi-tac" class="flex flex-nowrap items-center gap-2 flex-1 min-w-0 justify-end">
           <input type="hidden" name="sub" value="khach">
+          <input type="hidden" name="page" value="1">
+          <input type="hidden" name="per" value="${per}">
           ${select({ name: 'sort', onchange: 'this.form.submit()', class: 'w-auto shrink-0', options: `
             <option value="abc" ${sort === 'abc' ? 'selected' : ''}>A → Z</option>
             <option value="zyx" ${sort === 'zyx' ? 'selected' : ''}>Z → A</option>
@@ -588,21 +669,23 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
               <td colspan="10" class="text-right py-3">Tổng ${sorted.length} khách</td>
               <td class="text-right">${fmtTotM(tongAllNoVT)}</td>
               <td class="text-right">${fmtTotM(tongAllNoTH)}</td>
-              <td class="text-right">${tongAllPhiKho > 0 ? fmtNum(tongAllPhiKho) + ' PLN' : '—'}</td>
+              <td class="text-right">${tongAllPhiKho > 0 ? fmtNum(tongAllPhiKho) + ' PLN' : ''}</td>
               <td class="text-right text-error font-bold">${tongStr || '0'}</td>
               <td></td>
             </tr>
           </tbody>
         </table>
       </div>
+      ${pagingBar({ sub: 'khach', sort, search, page: pg.page, pages: pg.pages, per: pg.per, total: pg.total })}
     </div>
 
-    <div id="khBulkBar" class="hidden fixed bottom-0 left-0 right-0 bg-primary text-white px-6 py-3 flex items-center gap-3 z-50 shadow-lg">
+    <div id="khBulkBar" class="hidden bottom-0 left-0 right-0 bg-primary text-white px-6 py-3 flex items-center gap-3 z-50 shadow-lg">
       <span id="khBulkCount" class="font-semibold">0 khách đã chọn:</span>
-      <button onclick="khBulkDoiSoat('copy')" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30">📋 Copy đối soát</button>
-      <button onclick="khBulkDoiSoat('print')" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30">🖨 In đồng loạt</button>
-      <button onclick="khBulkViber()" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30">📱 Mở Viber</button>
-      <button onclick="khClearSel()" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30 ml-auto">✕ Bỏ chọn</button>
+      <button type="button" onclick="khBulkDoiSoat('copy')" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30">📋 Copy đối soát</button>
+      <button type="button" onclick="khBulkDoiSoat('print')" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30">🖨 In đồng loạt</button>
+      <button type="button" onclick="khBulkViber()" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30">📱 Mở Viber</button>
+      <button type="button" onclick="khBulkDelete()" class="btn btn-sm bg-error hover:bg-erroremphasis text-white border border-white/30">🗑 Xoá</button>
+      <button type="button" onclick="khClearSel()" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30 ml-auto">✕ Bỏ chọn</button>
     </div>
 
     <script>
@@ -652,6 +735,19 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
         var noSdt=s.filter(function(cb){return !JSON.parse(cb.dataset.ds).sdt;}).length;
         if(noSdt) alert(noSdt+' khách chưa có SĐT, đã bỏ qua.');
       };
+      window.khBulkDelete=function(){
+        var s=selected(); if(!s.length)return;
+        if(!confirm('Xoá '+s.length+' khách hàng đã chọn?')) return;
+        Promise.all(s.map(function(cb){
+          return fetch('/doi-tac/api/khach-hang/'+encodeURIComponent(cb.value),{method:'DELETE'}).then(function(r){
+            return r.ok ? {ok:true,id:cb.value} : r.text().then(function(t){return {ok:false,id:cb.value,err:t};});
+          });
+        })).then(function(results){
+          var fail=results.filter(function(x){return !x.ok;});
+          if(fail.length) alert('Không xoá được '+fail.length+' khách:\\n'+fail.map(function(x){return x.id+': '+x.err;}).join('\\n'));
+          if(fail.length < results.length) location.reload();
+        });
+      };
     })();
     </script>`;
 }
@@ -659,7 +755,7 @@ async function renderKhachList(db: D1Database, sort: string, search: string): Pr
 
 // ── Render supplier (hang) list ────────────────────────────────────
 
-async function renderHangList(db: D1Database, sort: string, search: string): Promise<string> {
+async function renderHangList(db: D1Database, sort: string, search: string, page: number, per: number): Promise<string> {
   const { results: hangList } = await db.prepare(
     `SELECT h.*, COUNT(lh.id) as lo_count,
             COALESCE(SUM(CASE WHEN lh.so_tien_hang > 0 THEN lh.so_tien_hang ELSE 0 END), 0) as tong_tien_hang
@@ -682,7 +778,7 @@ async function renderHangList(db: D1Database, sort: string, search: string): Pro
   for (const r of hangCcy) {
     if (!hangCcyMap.has(r.hang_id)) hangCcyMap.set(r.hang_id, {});
     const m = hangCcyMap.get(r.hang_id)!;
-    const tte = r.tte || r.tien_te || 'PLN';
+    const tte = resolveTienTeTh(r.tte, r.tien_te);
     m[tte] = (m[tte] || 0) + r.total;
   }
 
@@ -704,18 +800,21 @@ async function renderHangList(db: D1Database, sort: string, search: string): Pro
     }
   }
 
-  const rows = sorted.map(h => {
+  const pg = paginate(sorted, page, per);
+
+  const rows = pg.pageItems.map(h => {
     const id = String(h.id);
     const ccy = hangCcyMap.get(id) || {};
     const muaStr = Object.entries(ccy).length === 0
-      ? '—'
+      ? ''
       : Object.entries(ccy).map(([t, v]) => `${fmtNum(v)} ${t}`).join(', ');
 
     return tableRow([
+      `<input type="checkbox" class="hang-check rounded border-bordergray" value="${esc(id)}">`,
       `<span class="font-mono text-bodytext">${esc(id)}</span>`,
       `<a href="/doi-tac/hang/${id}" class="text-primary hover:underline font-medium">${esc(String(h.ten || ''))}</a>`,
-      esc(String(h.nuoc || '—')),
-      esc(String(h.dia_chi || '—')),
+      esc(String(h.nuoc || '')),
+      esc(String(h.dia_chi || '')),
       `<span class="text-right block">${Number(h.lo_count || 0)}</span>`,
       `<span class="text-right block">${muaStr}</span>`,
       tableActions(`openHangModal('${id}')`),
@@ -730,6 +829,8 @@ async function renderHangList(db: D1Database, sort: string, search: string): Pro
         ${btnPrimary('Hãng mới', { icon: 'solar:add-circle-linear', onclick: 'openHangModal()' })}
         <form method="GET" action="/doi-tac" class="flex flex-nowrap items-center gap-2 flex-1 min-w-0 justify-end">
           <input type="hidden" name="sub" value="hang">
+          <input type="hidden" name="page" value="1">
+          <input type="hidden" name="per" value="${per}">
           ${select({ name: 'sort', onchange: 'this.form.submit()', class: 'w-auto shrink-0', options: `
             <option value="abc" ${sort === 'abc' ? 'selected' : ''}>A → Z</option>
             <option value="zyx" ${sort === 'zyx' ? 'selected' : ''}>Z → A</option>
@@ -740,24 +841,60 @@ async function renderHangList(db: D1Database, sort: string, search: string): Pro
       <div class="overflow-x-auto">
         <table class="htql-table min-w-full w-full text-sm">
           <thead><tr class="border-b border-light-dark">
-            ${th('Mã')}${th('Tên')}${th('Nước')}${th('Địa chỉ')}
+            ${th('<input type="checkbox" id="hangSelectAll" class="rounded border-bordergray" title="Chọn tất cả">')}${th('Mã')}${th('Tên')}${th('Nước')}${th('Địa chỉ')}
             ${th('Phiếu', { align: 'right' })}${th('Tổng tiền hàng', { align: 'right' })}${th('')}
           </tr></thead>
           <tbody class="divide-y divide-border dark:divide-darkborder">${rows}
             <tr class="bg-lightwarning font-semibold border-t-2 border-warning/30">
-              <td colspan="5" class="text-right py-3">Tổng tiền hàng đã mua qua hãng</td>
+              <td colspan="6" class="text-right py-3">Tổng tiền hàng đã mua qua hãng (${sorted.length})</td>
               <td class="text-right">${muaAllStr}</td>
               <td></td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>`;
+      ${pagingBar({ sub: 'hang', sort, search, page: pg.page, pages: pg.pages, per: pg.per, total: pg.total })}
+    </div>
+
+    <div id="hangBulkBar" class="hidden bottom-0 left-0 right-0 bg-primary text-white px-6 py-3 flex items-center gap-3 z-50 shadow-lg">
+      <span id="hangBulkCount" class="font-semibold">0 hãng đã chọn:</span>
+      <button type="button" onclick="hangBulkDelete()" class="btn btn-sm bg-error hover:bg-erroremphasis text-white border border-white/30">🗑 Xoá</button>
+      <button type="button" onclick="hangClearSel()" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30 ml-auto">✕ Bỏ chọn</button>
+    </div>
+
+    <script>
+    (function(){
+      function selected(){ return Array.from(document.querySelectorAll('.hang-check:checked')); }
+      function updateBar(){
+        var s=selected(), bar=document.getElementById('hangBulkBar'), cnt=document.getElementById('hangBulkCount');
+        if(s.length){ bar.classList.remove('hidden'); cnt.textContent=s.length+' hãng đã chọn:'; }
+        else bar.classList.add('hidden');
+      }
+      document.getElementById('hangSelectAll')?.addEventListener('change',function(){
+        document.querySelectorAll('.hang-check').forEach(function(cb){cb.checked=this.checked;}.bind(this)); updateBar();
+      });
+      document.querySelectorAll('.hang-check').forEach(function(cb){ cb.addEventListener('change',updateBar); });
+      window.hangClearSel=function(){ document.querySelectorAll('.hang-check').forEach(function(cb){cb.checked=false;}); var sa=document.getElementById('hangSelectAll'); if(sa)sa.checked=false; updateBar(); };
+      window.hangBulkDelete=function(){
+        var s=selected(); if(!s.length)return;
+        if(!confirm('Xoá '+s.length+' hãng đã chọn?')) return;
+        Promise.all(s.map(function(cb){
+          return fetch('/doi-tac/api/hang/'+encodeURIComponent(cb.value),{method:'DELETE'}).then(function(r){
+            return r.ok ? {ok:true,id:cb.value} : r.text().then(function(t){return {ok:false,id:cb.value,err:t};});
+          });
+        })).then(function(results){
+          var fail=results.filter(function(x){return !x.ok;});
+          if(fail.length) alert('Không xoá được '+fail.length+' hãng:\\n'+fail.map(function(x){return x.id+': '+x.err;}).join('\\n'));
+          if(fail.length < results.length) location.reload();
+        });
+      };
+    })();
+    </script>`;
 }
 
 // ── Render Cty VT List ──────────────────────────────────────────
 
-async function renderCtyList(db: D1Database, search: string): Promise<string> {
+async function renderCtyList(db: D1Database, search: string, page: number, per: number): Promise<string> {
   const { results: ctyList } = await db.prepare(
     `SELECT cvt.*,
             (SELECT COUNT(*) FROM xe x WHERE x.cty_vt_id = cvt.id) as xe_count
@@ -806,19 +943,24 @@ async function renderCtyList(db: D1Database, search: string): Promise<string> {
     );
   }
 
-  const fmtCnKey = (cn: { phai_tra: Record<string, number>; da_tra: Record<string, number>; con_no: Record<string, number> }, key: 'phai_tra' | 'da_tra' | 'con_no') => {
-    return Object.entries(cn[key]).map(([t, v]) => `${fmtNum(v)} ${t}`).join(', ') || '0';
-  };
-
-  const rows = sorted.map(c => {
-    const id = String(c.id);
-    const cn = ctyCongNo.get(id) || { phai_tra: {}, da_tra: {}, con_no: {} };
-
+  for (const c of sorted) {
+    const cn = ctyCongNo.get(String(c.id)) || { phai_tra: {}, da_tra: {}, con_no: {} };
     for (const tte of Object.keys(cn.phai_tra)) {
       tongCtyAll.phai_tra[tte] = (tongCtyAll.phai_tra[tte] || 0) + (cn.phai_tra[tte] || 0);
       tongCtyAll.da_tra[tte] = (tongCtyAll.da_tra[tte] || 0) + (cn.da_tra[tte] || 0);
       tongCtyAll.con_no[tte] = (tongCtyAll.con_no[tte] || 0) + (cn.con_no[tte] || 0);
     }
+  }
+
+  const fmtCnKey = (cn: { phai_tra: Record<string, number>; da_tra: Record<string, number>; con_no: Record<string, number> }, key: 'phai_tra' | 'da_tra' | 'con_no') => {
+    return Object.entries(cn[key]).map(([t, v]) => `${fmtNum(v)} ${t}`).join(', ') || '0';
+  };
+
+  const pg = paginate(sorted, page, per);
+
+  const rows = pg.pageItems.map(c => {
+    const id = String(c.id);
+    const cn = ctyCongNo.get(id) || { phai_tra: {}, da_tra: {}, con_no: {} };
 
     const isOver = Object.values(cn.con_no).some(v => v > 0);
     const tenNgan = String(c.ten_ngan || '');
@@ -827,11 +969,12 @@ async function renderCtyList(db: D1Database, search: string): Promise<string> {
       : `<a href="/doi-tac/cty-vt/${id}" class="text-primary hover:underline font-medium">${esc(String(c.ten || ''))}</a>`;
 
     return tableRow([
+      `<input type="checkbox" class="cty-check rounded border-bordergray" value="${esc(id)}">`,
       `<span class="font-mono text-bodytext">${esc(id)}</span>`,
       tenDisplay,
-      esc(String(c.nip || '—')),
-      esc(String(c.dia_chi || '—')),
-      esc(String(c.sdt || '—')),
+      esc(String(c.nip || '')),
+      esc(String(c.dia_chi || '')),
+      esc(String(c.sdt || '')),
       `<span class="text-right block">${Number(c.xe_count || 0)}</span>`,
       `<span class="text-right block">${fmtCnKey(cn, 'phai_tra')}</span>`,
       `<span class="text-right block text-success">${fmtCnKey(cn, 'da_tra')}</span>`,
@@ -850,18 +993,20 @@ async function renderCtyList(db: D1Database, search: string): Promise<string> {
         ${btnPrimary('Cty VT mới', { icon: 'solar:add-circle-linear', onclick: 'openCtyModal()' })}
         <form method="GET" action="/doi-tac" class="flex flex-nowrap items-center gap-2 flex-1 min-w-0 justify-end">
           <input type="hidden" name="sub" value="cty">
+          <input type="hidden" name="page" value="1">
+          <input type="hidden" name="per" value="${per}">
           ${doiTacSearchField(search)}
         </form>
       </div>
       <div class="overflow-x-auto">
         <table class="htql-table min-w-full w-full text-sm">
           <thead><tr class="border-b border-light-dark">
-            ${th('Mã')}${th('Tên')}${th('NIP')}${th('Địa chỉ')}${th('SĐT')}${th('Xe', { align: 'right' })}
+            ${th('<input type="checkbox" id="ctySelectAll" class="rounded border-bordergray" title="Chọn tất cả">')}${th('Mã')}${th('Tên')}${th('NIP')}${th('Địa chỉ')}${th('SĐT')}${th('Xe', { align: 'right' })}
             ${th('Phải trả', { align: 'right' })}${th('Đã trả', { align: 'right' })}${th('Còn nợ', { align: 'right' })}${th('')}
           </tr></thead>
           <tbody class="divide-y divide-border dark:divide-darkborder">${rows}
             <tr class="bg-lightwarning font-semibold border-t-2 border-warning/30">
-              <td colspan="6" class="text-right py-3">Tổng tất cả cty VT</td>
+              <td colspan="7" class="text-right py-3">Tổng tất cả cty VT (${sorted.length})</td>
               <td class="text-right">${fmtAllKey('phai_tra')}</td>
               <td class="text-right text-success">${fmtAllKey('da_tra')}</td>
               <td class="text-right text-error font-bold">${fmtAllKey('con_no')}</td>
@@ -870,7 +1015,43 @@ async function renderCtyList(db: D1Database, search: string): Promise<string> {
           </tbody>
         </table>
       </div>
-    </div>`;
+      ${pagingBar({ sub: 'cty', search, page: pg.page, pages: pg.pages, per: pg.per, total: pg.total })}
+    </div>
+
+    <div id="ctyBulkBar" class="hidden bottom-0 left-0 right-0 bg-primary text-white px-6 py-3 flex items-center gap-3 z-50 shadow-lg">
+      <span id="ctyBulkCount" class="font-semibold">0 cty đã chọn:</span>
+      <button type="button" onclick="ctyBulkDelete()" class="btn btn-sm bg-error hover:bg-erroremphasis text-white border border-white/30">🗑 Xoá</button>
+      <button type="button" onclick="ctyClearSel()" class="btn btn-sm bg-white/15 hover:bg-white/25 text-white border border-white/30 ml-auto">✕ Bỏ chọn</button>
+    </div>
+
+    <script>
+    (function(){
+      function selected(){ return Array.from(document.querySelectorAll('.cty-check:checked')); }
+      function updateBar(){
+        var s=selected(), bar=document.getElementById('ctyBulkBar'), cnt=document.getElementById('ctyBulkCount');
+        if(s.length){ bar.classList.remove('hidden'); cnt.textContent=s.length+' cty đã chọn:'; }
+        else bar.classList.add('hidden');
+      }
+      document.getElementById('ctySelectAll')?.addEventListener('change',function(){
+        document.querySelectorAll('.cty-check').forEach(function(cb){cb.checked=this.checked;}.bind(this)); updateBar();
+      });
+      document.querySelectorAll('.cty-check').forEach(function(cb){ cb.addEventListener('change',updateBar); });
+      window.ctyClearSel=function(){ document.querySelectorAll('.cty-check').forEach(function(cb){cb.checked=false;}); var sa=document.getElementById('ctySelectAll'); if(sa)sa.checked=false; updateBar(); };
+      window.ctyBulkDelete=function(){
+        var s=selected(); if(!s.length)return;
+        if(!confirm('Xoá '+s.length+' công ty VT đã chọn?')) return;
+        Promise.all(s.map(function(cb){
+          return fetch('/doi-tac/api/cty-vt/'+encodeURIComponent(cb.value),{method:'DELETE'}).then(function(r){
+            return r.ok ? {ok:true,id:cb.value} : r.text().then(function(t){return {ok:false,id:cb.value,err:t};});
+          });
+        })).then(function(results){
+          var fail=results.filter(function(x){return !x.ok;});
+          if(fail.length) alert('Không xoá được '+fail.length+' cty:\\n'+fail.map(function(x){return x.id+': '+x.err;}).join('\\n'));
+          if(fail.length < results.length) location.reload();
+        });
+      };
+    })();
+    </script>`;
 }
 
 // ── GET /khach-hang/:id — KH Detail ─────────────────────────────
@@ -910,7 +1091,7 @@ doiTacRoutes.get('/khach-hang/:id', async (c) => {
 
     const soTienHang = Number(lo.so_tien_hang || 0);
     if (soTienHang > 0) {
-      const tienTeTH = String(lo.tien_te_th || lo.tien_te || 'PLN');
+      const tienTeTH = resolveTienTeTh(lo.tien_te_th, lo.tien_te);
       const kTH = `${dauMuc} (TH)|${tienTeTH}`;
       if (!mucs[kTH]) mucs[kTH] = { dau_muc: `${dauMuc} (Tiền hàng)`, tte: tienTeTH, phai_thu: 0, da_thu: 0, con_no: 0, is_th: true };
       mucs[kTH].phai_thu += soTienHang;
@@ -952,7 +1133,7 @@ doiTacRoutes.get('/khach-hang/:id', async (c) => {
       <div class="flex justify-between items-start flex-wrap gap-4">
         <div>
           <h1 class="text-2xl font-bold">👤 ${esc(kh.ten)}</h1>
-          <p class="text-blue-100 mt-1 text-sm">${esc(kh.id)} · ${esc(kh.nip || 'NIP: —')} · ${esc(kh.dia_chi || '')} · ${esc(kh.sdt || '—')}</p>
+          <p class="text-blue-100 mt-1 text-sm">${esc(kh.id)}${kh.nip ? ` · ${esc(kh.nip)}` : ''}${kh.dia_chi ? ` · ${esc(kh.dia_chi)}` : ''}${kh.sdt ? ` · ${esc(kh.sdt)}` : ''}</p>
           <div class="mt-3 flex gap-2 flex-wrap">
             <span class="bg-white/20 px-3 py-1 rounded-full text-xs">${dgAuto === 'tot' ? '🟢 Tốt' : dgAuto === 'canhbao' ? '🔴 Cảnh báo' : '🟡 Bình thường'}</span>
             <span class="bg-white/20 px-3 py-1 rounded-full text-xs">Hạn TT: ${kh.han_tt || 30} ngày</span>
@@ -1039,11 +1220,11 @@ doiTacRoutes.get('/khach-hang/:id', async (c) => {
               return `<tr class="hover:bg-gray-50 border-b border-gray-50">
                 <td class="px-4 py-2 text-sm font-medium">${esc(String(l.id))}</td>
                 <td class="px-4 py-2 text-sm">${fmtDate(String(l.ngay_di))}</td>
-                <td class="px-4 py-2 text-sm">${l.tuyen_ten ? `<span class="inline-block px-2 py-0.5 text-xs rounded bg-${tuyenMau}-100 text-${tuyenMau}-700">${esc(String(l.tuyen_ten))}</span>` : '—'}</td>
+                <td class="px-4 py-2 text-sm">${l.tuyen_ten ? `<span class="inline-block px-2 py-0.5 text-xs rounded bg-${tuyenMau}-100 text-${tuyenMau}-700">${esc(String(l.tuyen_ten))}</span>` : ''}</td>
                 <td class="px-4 py-2 text-sm">${esc(String(l.hang_ten || ''))}</td>
                 <td class="px-4 py-2 text-sm text-right">${Number(l.so_kien)}</td>
                 <td class="px-4 py-2 text-sm text-right">${fmtNum(Number(l.thanh_tien) - Number(l.giam_gia || 0))} ${l.tien_te}</td>
-                <td class="px-4 py-2 text-sm text-right">${Number(l.so_tien_hang) > 0 ? `${fmtNum(Number(l.so_tien_hang))} ${l.tien_te_th || l.tien_te}` : '—'}</td>
+                <td class="px-4 py-2 text-sm text-right">${Number(l.so_tien_hang) > 0 ? `${fmtNum(Number(l.so_tien_hang))} ${resolveTienTeTh(l.tien_te_th, l.tien_te)}` : ''}</td>
                 <td class="px-4 py-2 text-sm">${trangThai}</td>
               </tr>`;
             }).join('')}
@@ -1116,7 +1297,7 @@ doiTacRoutes.get('/hang/:id', async (c) => {
   for (const l of lots) {
     const sth = Number(l.so_tien_hang || 0);
     if (sth > 0) {
-      const tte = String(l.tien_te_th || l.tien_te || 'PLN');
+      const tte = resolveTienTeTh(l.tien_te_th, l.tien_te);
       tienHangByCcy[tte] = (tienHangByCcy[tte] || 0) + sth;
     }
     khachIds.add(String(l.khach_id));
@@ -1175,10 +1356,10 @@ doiTacRoutes.get('/hang/:id', async (c) => {
                 <td class="px-4 py-2 text-sm font-medium">${esc(String(l.id))}</td>
                 <td class="px-4 py-2 text-sm">${fmtDate(String(l.ngay_di))}</td>
                 <td class="px-4 py-2 text-sm"><a href="/doi-tac/khach-hang/${String(l.khach_id)}" class="text-blue-600 hover:underline">${esc(String(l.khach_ten || ''))}</a></td>
-                <td class="px-4 py-2 text-sm">${l.tuyen_ten ? `<span class="inline-block px-2 py-0.5 text-xs rounded bg-${tuyenMau}-100 text-${tuyenMau}-700">${esc(String(l.tuyen_ten))}</span>` : '—'}</td>
+                <td class="px-4 py-2 text-sm">${l.tuyen_ten ? `<span class="inline-block px-2 py-0.5 text-xs rounded bg-${tuyenMau}-100 text-${tuyenMau}-700">${esc(String(l.tuyen_ten))}</span>` : ''}</td>
                 <td class="px-4 py-2 text-sm text-right">${Number(l.so_kien)}</td>
                 <td class="px-4 py-2 text-sm text-right">${fmtNum(Number(l.thanh_tien) - Number(l.giam_gia || 0))} ${l.tien_te}</td>
-                <td class="px-4 py-2 text-sm text-right">${Number(l.so_tien_hang) > 0 ? `${fmtNum(Number(l.so_tien_hang))} ${l.tien_te_th || l.tien_te}` : '—'}</td>
+                <td class="px-4 py-2 text-sm text-right">${Number(l.so_tien_hang) > 0 ? `${fmtNum(Number(l.so_tien_hang))} ${resolveTienTeTh(l.tien_te_th, l.tien_te)}` : ''}</td>
               </tr>`;
             }).join('')}
             </tbody></table></div>`
@@ -1251,7 +1432,7 @@ doiTacRoutes.get('/cty-vt/:id', async (c) => {
         <div>
           <h1 class="text-2xl font-bold">🚛 ${esc(String(cty.ten_ngan || cty.ten || ''))}</h1>
           ${String(cty.ten_ngan || '') ? `<p class="text-cyan-200 text-sm">${esc(String(cty.ten || ''))}</p>` : ''}
-          <p class="text-cyan-100 mt-1 text-sm">${esc(String(cty.id))}${String(cty.nip || '') ? ` · NIP: ${esc(String(cty.nip))}` : ''} · ${esc(String(cty.dia_chi || ''))} · ${esc(String(cty.sdt || '—'))}${String(cty.email || '') ? ` · ${esc(String(cty.email))}` : ''}</p>
+          <p class="text-cyan-100 mt-1 text-sm">${esc(String(cty.id))}${String(cty.nip || '') ? ` · NIP: ${esc(String(cty.nip))}` : ''}${String(cty.dia_chi || '') ? ` · ${esc(String(cty.dia_chi))}` : ''}${String(cty.sdt || '') ? ` · ${esc(String(cty.sdt))}` : ''}${String(cty.email || '') ? ` · ${esc(String(cty.email))}` : ''}</p>
           ${String(cty.ghi_chu || '') ? `<p class="text-cyan-200 text-xs mt-2">📝 ${esc(String(cty.ghi_chu))}</p>` : ''}
         </div>
         <button onclick="openCtyModal('${String(cty.id)}')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm cursor-pointer">✏ Sửa</button>
@@ -1324,7 +1505,7 @@ doiTacRoutes.get('/cty-vt/:id', async (c) => {
               return `<tr class="hover:bg-gray-50 border-b border-gray-50">
                 <td class="px-4 py-2 text-sm font-medium">${esc(String(ch.id))}</td>
                 <td class="px-4 py-2 text-sm">${esc(String(ch.so_xe || ''))}</td>
-                <td class="px-4 py-2 text-sm">${ch.tuyen_ten ? `<span class="inline-block px-2 py-0.5 text-xs rounded bg-${tuyenMau}-100 text-${tuyenMau}-700">${esc(String(ch.tuyen_ten))}</span>` : '—'}</td>
+                <td class="px-4 py-2 text-sm">${ch.tuyen_ten ? `<span class="inline-block px-2 py-0.5 text-xs rounded bg-${tuyenMau}-100 text-${tuyenMau}-700">${esc(String(ch.tuyen_ten))}</span>` : ''}</td>
                 <td class="px-4 py-2 text-sm">${fmtDate(String(ch.ngay_di))} → ${fmtDate(String(ch.ngay_den))}</td>
                 <td class="px-4 py-2 text-sm text-right font-bold">${fmtNum(Number(ch.gia_chuyen))} ${ch.tien_te}</td>
                 <td class="px-4 py-2 text-sm">${tt}</td>
