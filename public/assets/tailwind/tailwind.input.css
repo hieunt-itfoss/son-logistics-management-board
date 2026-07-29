@@ -173,7 +173,7 @@
 }
 
 @utility btn-error {
-    @apply bg-error text-white hover:bg-erroremphasis
+    @apply rounded-md bg-error hover:bg-erroremphasis text-white text-sm py-2 px-4 text-center capitalize font-medium;
 } 
 
 @utility btn-light-primary {

@@ -1,6 +1,17 @@
-import { DM_GROUP_LABEL, type DauMucGroup } from '../types';
+import { DM_GROUP_LABEL, type DauMucGroup, type TienTe } from '../types';
 
 export type CcyMap = Record<string, number>;
+
+const VALID_TIEN_TE = new Set<string>(['PLN', 'EUR', 'USD']);
+
+/** Prefer tien_te_th when it is a real currency; otherwise fall back (guards corrupt DB values). */
+export function resolveTienTeTh(tienTeTh: unknown, tienTe: unknown, fallback: TienTe = 'PLN'): TienTe {
+  const th = String(tienTeTh || '').trim();
+  if (VALID_TIEN_TE.has(th)) return th as TienTe;
+  const te = String(tienTe || '').trim();
+  if (VALID_TIEN_TE.has(te)) return te as TienTe;
+  return fallback;
+}
 
 export function fmtCcyMap(m: CcyMap, sep = ' · '): string {
   const entries = Object.entries(m).filter(([, v]) => Math.abs(v) > 0.001);
@@ -70,7 +81,7 @@ export async function computeReceivables(db: D1Database): Promise<{
 
       const soTienHang = Number(lo.so_tien_hang || 0);
       if (soTienHang > 0) {
-        const tienTeTH = String(lo.tien_te_th || lo.tien_te || 'PLN');
+        const tienTeTH = resolveTienTeTh(lo.tien_te_th, lo.tien_te);
         const kTH = `${dauMuc} (TH)|${tienTeTH}`;
         if (!mucs[kTH]) mucs[kTH] = { phai_thu: 0, da_thu: 0, tte: tienTeTH };
         mucs[kTH].phai_thu += soTienHang;
