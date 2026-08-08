@@ -1,4 +1,4 @@
-/* HTQLVT — theme overrides (TailwindAdmin + Tatem-inspired tokens) */
+/* HTQLVT - theme overrides (TailwindAdmin + Tatem-inspired tokens) */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
@@ -206,7 +206,7 @@ html {
   font-size: 13px;
 }
 
-/* Dashboard — TailwindAdmin compact layout */
+/* Dashboard - TailwindAdmin compact layout */
 .htql-dashboard {
   --dash-gap: 24px;
 }
@@ -824,13 +824,12 @@ html {
 }
 
 .htql-dt-scroll {
-  overflow-x: visible;
+  overflow-x: auto;
 }
 
-/* Fit all columns within the viewport — wrap cell content instead of horizontal scroll */
 .htql-dt table {
   table-layout: fixed;
-  width: 100%;
+  width: max-content;
   min-width: 100%;
   border-collapse: collapse;
   font-size: 0.8125rem;
@@ -882,8 +881,18 @@ html {
   align-items: center;
   gap: 0.25rem;
   padding: 0.5rem 0.75rem;
+  padding-right: 0.85rem;
   cursor: default;
   user-select: none;
+  pointer-events: none;
+}
+
+.htql-dt-th-inner a,
+.htql-dt-th-inner button,
+.htql-dt-th-inner input,
+.htql-dt-th-inner label,
+.htql-dt-th-inner select {
+  pointer-events: auto;
 }
 
 .htql-dt-sortable .htql-dt-th-inner {
@@ -921,10 +930,11 @@ html {
   right: 0;
   top: 0;
   bottom: 0;
-  width: 5px;
+  width: 8px;
   cursor: col-resize;
   user-select: none;
-  z-index: 1;
+  touch-action: none;
+  z-index: 2;
 }
 
 .htql-dt-resize:hover,
