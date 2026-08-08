@@ -1,5 +1,5 @@
 /**
- * TailwindAdmin SSR UI helpers — see DESIGN.md
+ * TailwindAdmin SSR UI helpers - see DESIGN.md
  */
 
 export function pageHeader(
@@ -84,7 +84,7 @@ export function statCard(
     </div>`;
 }
 
-/** Compact KPI tile — TailwindAdmin dashboard style (icon + value row) */
+/** Compact KPI tile - TailwindAdmin dashboard style (icon + value row) */
 export function kpiCard(
   label: string,
   value: string,
@@ -253,7 +253,7 @@ export function tableActions(
         <iconify-icon icon="solar:trash-bin-trash-linear" width="18"></iconify-icon>
       </button>`
     : "";
-  if (!edit && !perm && !del) return "—";
+  if (!edit && !perm && !del) return "-";
   const flexCls = opts?.center
     ? "flex items-center justify-center gap-1"
     : "flex items-center gap-1";
@@ -295,7 +295,7 @@ export function btnDanger(
   return `<button type="${type}" class="btn bg-error hover:bg-erroremphasis text-white flex items-center gap-2 cursor-pointer${extra}"${onclick}>${icon}${label}</button>`;
 }
 
-/** Standard form-control classes — use in client-side templates when needed */
+/** Standard form-control classes - use in client-side templates when needed */
 export const FORM_CONTROL_CLASS = "form-control w-full";
 
 /** Compact toolbar / filter label */
@@ -334,7 +334,7 @@ function controlAttrs(
   };
 }
 
-/** Label + control wrapper — same layout for input, select, textarea */
+/** Label + control wrapper - same layout for input, select, textarea */
 export function formField(
   label: string,
   control: string,
@@ -383,7 +383,7 @@ export function textarea(attrs: ControlAttrs): string {
   return `<textarea class="${className}" ${parts}>${value}</textarea>`;
 }
 
-/** Type-to-search combobox — one field, hidden input holds the selected value */
+/** Type-to-search combobox - one field, hidden input holds the selected value */
 export function searchSelect(opts: {
   id: string;
   name: string;

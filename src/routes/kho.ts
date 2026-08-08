@@ -12,14 +12,14 @@ const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;'
 const fmtNum = (n: number): string => n.toLocaleString('vi-VN');
 
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return '—';
+  if (!d) return '-';
   const parts = d.split('-');
   if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
   return d;
 }
 
 /* ══════════════════════════════════════════════════════════════
-   GET / — Main Kho view (warehouse — unreturned cargo)
+   GET / - Main Kho view (warehouse - unreturned cargo)
    ══════════════════════════════════════════════════════════════ */
 khoRoutes.get('/', async (c) => {
   const user = c.get('user');
@@ -83,10 +83,10 @@ khoRoutes.get('/', async (c) => {
 
     rowData.push({
       id: String(lh.id),
-      khTen: String(lh.khach_hang_ten || '—'),
+      khTen: String(lh.khach_hang_ten || '-'),
       maKh: String(lh.ma_kh || ''),
-      hangTen: String(lh.hang_ten || '—'),
-      tuyenTen: String(lh.tuyen_ten || '—'),
+      hangTen: String(lh.hang_ten || '-'),
+      tuyenTen: String(lh.tuyen_ten || '-'),
       tuyenMau: String(lh.tuyen_mau || ''),
       chuyenId: String(lh.chuyen_id || ''),
       ngayDi: String(lh.ngay_di || ''),
@@ -109,7 +109,7 @@ khoRoutes.get('/', async (c) => {
       ? `<button type="button" class="htql-table-action htql-table-action--edit" onclick="showUpdateForm('${esc(r.id)}', ${r.conLuu + (Number(r.conLuu) === Number(r.conLuu) ? 0 : 0)}, 0)" title="Cập nhật trả hàng" aria-label="Sửa">
           <iconify-icon icon="solar:pen-2-linear" width="18"></iconify-icon>
         </button>`
-      : '—';
+      : '-';
 
     return tableRow([
       `<input type="checkbox" class="kho-check rounded" data-id="${esc(r.id)}" data-con="${r.conLuu}" data-kh="${esc(r.khachId)}" data-phi="${r.tienKho}" />`,
@@ -117,14 +117,14 @@ khoRoutes.get('/', async (c) => {
       `<a href="/doi-tac?tab=kh" class="hover:underline"><strong>${esc(r.khTen)}</strong></a> <span class="text-bodytext text-xs">(${esc(r.maKh)})</span>`,
       esc(r.hangTen),
       r.tuyenMau ? `<span class="inline-block px-2 py-0.5 rounded text-xs font-medium" style="background:${esc(r.tuyenMau)}20;color:${esc(r.tuyenMau)}">${esc(r.tuyenTen)}</span>` : esc(r.tuyenTen),
-      r.chuyenId ? `<a href="/chuyen-xe/${esc(r.chuyenId)}" class="text-primary hover:underline font-mono text-xs">${esc(r.chuyenId)}</a>` : '<span class="text-bodytext">—</span>',
+      r.chuyenId ? `<a href="/chuyen-xe/${esc(r.chuyenId)}" class="text-primary hover:underline font-mono text-xs">${esc(r.chuyenId)}</a>` : '<span class="text-bodytext">-</span>',
       fmtDate(r.ngayDi),
       fmtDate(r.ngayVe),
-      `<span class="${khoColor} ${khoWeight}">${r.soNgayKho > 0 ? r.soNgayKho + 'd' : '—'}</span>`,
+      `<span class="${khoColor} ${khoWeight}">${r.soNgayKho > 0 ? r.soNgayKho + 'd' : '-'}</span>`,
       `<span class="font-semibold">${r.conLuu}</span>`,
       `${dgKho} PLN`,
-      `<span class="${tienColor}">${r.tienKho > 0 ? fmtNum(r.tienKho) + ' PLN' : '—'}</span>`,
-      `<span class="text-xs text-bodytext max-w-[120px] truncate inline-block">${esc(r.lyDoThieu) || '—'}</span>`,
+      `<span class="${tienColor}">${r.tienKho > 0 ? fmtNum(r.tienKho) + ' PLN' : '-'}</span>`,
+      `<span class="text-xs text-bodytext max-w-[120px] truncate inline-block">${esc(r.lyDoThieu) || '-'}</span>`,
       `<div class="flex items-center justify-center gap-1">${editBtn}</div>`,
     ]);
   }).join('');
@@ -140,7 +140,7 @@ khoRoutes.get('/', async (c) => {
   ).join('');
 
   const content = `
-    ${pageHeader('Kho — Hàng còn lưu', {
+    ${pageHeader('Kho - Hàng còn lưu', {
       subtitle: `Tổng <strong class="text-primary text-lg">${totalKien}</strong> kiện · ${lots.length} phiếu · Tiền lưu kho dự kiến: <strong class="text-warning">${fmtNum(tongTienKho)} PLN</strong>`,
     })}
 
@@ -334,7 +334,7 @@ khoRoutes.get('/api/kho', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   POST /api/kho/update-delivered — Update da_tra_hang
+   POST /api/kho/update-delivered - Update da_tra_hang
    ══════════════════════════════════════════════════════════════ */
 khoRoutes.post('/api/kho/update-delivered', async (c) => {
   const body = await c.req.json();
@@ -345,7 +345,7 @@ khoRoutes.post('/api/kho/update-delivered', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   POST /api/kho/bulk-xuat — Bulk mark lots as fully returned
+   POST /api/kho/bulk-xuat - Bulk mark lots as fully returned
    ══════════════════════════════════════════════════════════════ */
 khoRoutes.post('/api/kho/bulk-xuat', async (c) => {
   const body = await c.req.json();
@@ -362,7 +362,7 @@ khoRoutes.post('/api/kho/bulk-xuat', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   POST /api/kho/bulk-tinh-phi — Bulk create phiếu thu for storage fees
+   POST /api/kho/bulk-tinh-phi - Bulk create phiếu thu for storage fees
    ══════════════════════════════════════════════════════════════ */
 khoRoutes.post('/api/kho/bulk-tinh-phi', async (c) => {
   const body = await c.req.json();

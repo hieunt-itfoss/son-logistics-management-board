@@ -1,11 +1,11 @@
-# HTQLVT — Design System for AI Agents
+# HTQLVT - Design System for AI Agents
 
 > **Stack:** TailwindAdmin layout + Tatem tokens. SSR HTML only (no React).
-> **Visual:** Midnight-terminal clarity — cool, precise, dark-mode-first with restrained blue accent.
+> **Visual:** Midnight-terminal clarity - cool, precise, dark-mode-first with restrained blue accent.
 
-**Template:** [TailwindAdmin React](https://react.tailwind-admin.com/) — vertical sidebar, fixed topbar, `card` / `btn` / `form-control` utilities from `public/assets/tailwind/tailwind.css`.
+**Template:** [TailwindAdmin React](https://react.tailwind-admin.com/) - vertical sidebar, fixed topbar, `card` / `btn` / `form-control` utilities from `public/assets/tailwind/tailwind.css`.
 
-**Visual direction:** [Tatem](https://styles.refero.design/style/cb6e4ab0-b8fe-45b0-bd22-6339b073e26d) — a dark command-line interface with subtle interactive glows. Calm, quiet, systematic. Very sparing use of color; readability and information hierarchy through typographic sizing and achromatic value contrasts.
+**Visual direction:** [Tatem](https://styles.refero.design/style/cb6e4ab0-b8fe-45b0-bd22-6339b073e26d) - a dark command-line interface with subtle interactive glows. Calm, quiet, systematic. Very sparing use of color; readability and information hierarchy through typographic sizing and achromatic value contrasts.
 
 **Theme default:** light + `Blue_Theme`. Dark mode via `.dark` class on `<html>` (toggle in header). Dark mode is the primary visual design target.
 
@@ -22,7 +22,7 @@
 | Shared modal system (CSS) | `public/assets/css/theme.css` (`.htql-modal-*` classes) |
 | Shared modal system (JS) | `public/assets/js/htql-modal.js` (open/close/drag/Escape) |
 | TailwindAdmin source | `public/assets/tailwind/tailwind.input.css` |
-| Compiled CSS (browser) | `public/assets/tailwind/tailwind.css` — run `npm run build:css` after editing source |
+| Compiled CSS (browser) | `public/assets/tailwind/tailwind.css` - run `npm run build:css` after editing source |
 | HTQLVT overrides (font, tokens) | `public/assets/css/theme.css` |
 | Sidebar/theme JS | `public/assets/js/app.init.js`, `app.min.js` |
 | Icons | Iconify Solar (`iconify-icon`) |
@@ -48,7 +48,7 @@ Every authenticated page uses `layout(title, content, user, activePageId)` from 
       <div class="container py-6">  <!-- page content -->
 ```
 
-**Do not** duplicate `layout()` per route. **Do not** load `cdn.tailwindcss.com` — use compiled `/assets/tailwind/tailwind.css` only.
+**Do not** duplicate `layout()` per route. **Do not** load `cdn.tailwindcss.com` - use compiled `/assets/tailwind/tailwind.css` only.
 
 After changing `tailwind.input.css` or utilities under `public/assets/tailwind/`:
 
@@ -58,7 +58,7 @@ npm run build:css
 
 ---
 
-## Tokens — Colors
+## Tokens - Colors
 
 ### Tatem palette (source of truth)
 
@@ -71,7 +71,7 @@ npm run build:css
 | Obsidian Grey | `#606060` | `--color-obsidian-grey` | Tertiary text, subtle backgrounds, borders |
 | Charcoal Black | `#3b3b3b` | `--color-charcoal-black` / `--htql-panel` | Card/element backgrounds (dark), dividers, deeper shadows |
 | Mist Grey | `#c2c2c2` | `--color-mist-grey` | Hover states on neutral elements, subtle accent backgrounds |
-| Cerulean Accent | `#007eed` | `--color-cerulean-accent` / `--htql-accent` | Interactive elements, links, active states, indicators — the only saturated color |
+| Cerulean Accent | `#007eed` | `--color-cerulean-accent` / `--htql-accent` | Interactive elements, links, active states, indicators - the only saturated color |
 
 ### TailwindAdmin mapping (primary UI)
 
@@ -99,16 +99,16 @@ Set via `data-color-theme="Blue_Theme"` on `<html>` (see `default_theme.css`).
 
 ### Quick color reference
 
-- Text (primary): `text-dark dark:text-white` — maps to Polar White on dark
-- Text (muted): `text-bodytext` / `text-link` — maps to Silver Tone / Pewter Mist
+- Text (primary): `text-dark dark:text-white` - maps to Polar White on dark
+- Text (muted): `text-bodytext` / `text-link` - maps to Silver Tone / Pewter Mist
 - Background (page): `bg-lightgray` light / Twilight Ink dark
 - CTA: `btn` class (primary Cerulean Accent)
 - Accent KPI: `#007eed` / `text-primary`
-- Borders: `border-bordergray dark:border-darkborder` — maps to Obsidian Grey
+- Borders: `border-bordergray dark:border-darkborder` - maps to Obsidian Grey
 
 ---
 
-## Tokens — Typography
+## Tokens - Typography
 
 ### Font: Inter (Tatem standard)
 
@@ -140,7 +140,7 @@ Set via `data-color-theme="Blue_Theme"` on `<html>` (see `default_theme.css`).
 
 ---
 
-## Tokens — Spacing & Shape
+## Tokens - Spacing & Shape
 
 ### Tatem reference
 
@@ -264,7 +264,7 @@ Built-in behaviors (from `htql-modal.js`, loaded in every page via `layout.ts`):
 - **Backdrop click** dismisses
 - **Escape key** dismisses
 - **`[data-htql-modal-close]`** button dismisses
-- **Header drag** — grab `.htql-modal-drag-handle` (the header) to reposition
+- **Header drag** - grab `.htql-modal-drag-handle` (the header) to reposition
 - **Body scroll lock** while open
 - **z-index: 70** (above sidebar z-60)
 
@@ -304,8 +304,8 @@ All modal classes use theme tokens (not hardcoded `text-gray-*` / `bg-white`):
 ### Import modal extras
 
 The import modal uses additional CSS classes for its tabbed interface:
-- `.htql-import-tab` / `.htql-import-tab.active` — type selector chips
-- `.htql-import-dropzone` / `.dz-dragover` — file drop area
+- `.htql-import-tab` / `.htql-import-tab.active` - type selector chips
+- `.htql-import-dropzone` / `.dz-dragover` - file drop area
 - `.htql-import-dropzone-text`, `.htql-import-dropzone-hint`, `.htql-import-file-name`
 
 ---
@@ -338,7 +338,7 @@ Split panel: brand left (`lg:w-[55%]`, primary gradient), form right. Use `form-
 
 ### Toolbar with search (doi-tac pattern)
 
-Single row: primary button left, filters/search right (`flex-nowrap`, `justify-end`). Search input: `type="text"` (not `search` — avoids browser clear button), icon submit button inside relative wrapper.
+Single row: primary button left, filters/search right (`flex-nowrap`, `justify-end`). Search input: `type="text"` (not `search` - avoids browser clear button), icon submit button inside relative wrapper.
 
 ---
 
@@ -362,7 +362,7 @@ Icon color: inherit from parent. In dark mode, icons naturally pick up `--darkli
 - TailwindAdmin: `dark:` variants from compiled CSS
 - Persist in `localStorage` key `htqlvt-theme`
 - Login page: light only
-- **All new UI must include `dark:` variants** — never use bare `text-gray-*`, `bg-white`, `border-gray-*` without dark equivalents
+- **All new UI must include `dark:` variants** - never use bare `text-gray-*`, `bg-white`, `border-gray-*` without dark equivalents
 
 ### Dark mode color mapping
 
@@ -417,8 +417,8 @@ Text: `#007eed`, Background: transparent, Font: Inter 13px. In HTQLVT: `text-pri
 - Maintain 6px default radius, 8px for buttons, 16px for hero/modal panels
 - Use 8px element gap, 24–28px section gap
 - **Always provide `dark:` variants** for text, bg, and border colors
-- Use `modalShell()` for all new modals — never hand-roll modal structure
-- Use `htqlOpenModal()` / `htqlCloseModal()` — never manipulate modal visibility directly
+- Use `modalShell()` for all new modals - never hand-roll modal structure
+- Use `htqlOpenModal()` / `htqlCloseModal()` - never manipulate modal visibility directly
 
 ### Don't
 
@@ -427,10 +427,10 @@ Text: `#007eed`, Background: transparent, Font: Inter 13px. In HTQLVT: `text-pri
 - Don't use heavy shadows; prefer `data-card="border"` (bordered cards) and value contrast
 - Don't introduce saturated colors beyond Cerulean Accent and status colors
 - Don't use `tai_xe` table name in UI labels (use Nhân viên / Lái xe)
-- Don't vary font families — Inter is the only typeface
+- Don't vary font families - Inter is the only typeface
 - Don't use bare `text-gray-*`, `bg-white`, `border-gray-*` without dark counterparts
-- Don't use `z-50` for modals (sidebar is z-60) — modals use z-70 via `.htql-modal-backdrop`
-- Don't use `items-end` (bottom sheet) for modal positioning — modals center ~8vh from top
+- Don't use `z-50` for modals (sidebar is z-60) - modals use z-70 via `.htql-modal-backdrop`
+- Don't use `items-end` (bottom sheet) for modal positioning - modals center ~8vh from top
 - Don't use busy backgrounds or textures; stick to solid dark neutrals
 
 ---

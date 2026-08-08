@@ -42,7 +42,7 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return d.slice(0, 10);
 }
 
@@ -76,7 +76,7 @@ function permCell(role: Role, key: PermOverrideKey): string {
   const v = getEffectivePerms(role, "{}")[key];
   return v
     ? '<span class="text-success font-bold">✓</span>'
-    : '<span class="text-bodytext">—</span>';
+    : '<span class="text-bodytext">-</span>';
 }
 
 const BACKUP_TABLES = [
@@ -215,14 +215,14 @@ managerRoutes.get("/", async (c) => {
       const customBadge =
         n > 0
           ? `<span class="inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-lightwarning text-warning">${n} ghi đè</span>`
-          : '<span class="text-xs text-bodytext">— mặc định —</span>';
+          : '<span class="text-xs text-bodytext">- mặc định -</span>';
       return tableRow(
         [
           `<span class="font-mono text-bodytext">${esc(nv.id)}</span>`,
           `<span class="font-medium text-dark dark:text-white">${esc(nv.ten)}</span>`,
           `<span class="inline-block px-2 py-0.5 rounded-md text-xs font-medium ${color}">${NV_ROLE_LABELS[nv.vai_tro] || nv.vai_tro}</span>`,
           customBadge,
-          esc(nv.sdt || "—"),
+          esc(nv.sdt || "-"),
           tableActions(
             `editNV('${nv.id}')`,
             isAdmin ? `deleteNV('${nv.id}')` : undefined,
@@ -241,7 +241,7 @@ managerRoutes.get("/", async (c) => {
         `<div class="py-2 px-4 border-b border-light-dark text-sm text-bodytext flex flex-wrap gap-1">
       <span class="text-xs font-mono text-bodytext">${fmtDate(a.ngay)} ${a.gio || ""}</span>
       <span class="text-primary font-medium">${esc(a.nguoi_label || "")}</span>
-      <span>— ${esc(a.hanh_dong || "")}</span>
+      <span>- ${esc(a.hanh_dong || "")}</span>
       <strong class="text-dark dark:text-white">${esc(a.target || "")}</strong>
       <span class="text-bodytext">${esc(a.chi_tiet || "")}</span>
     </div>`,
@@ -339,10 +339,10 @@ managerRoutes.get("/", async (c) => {
                   : '<span class="inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-lighterror text-error">Đã khoá</span>';
                 const mustChangeBadge = u.must_change_password
                   ? '<span class="inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-lightwarning text-warning">Phải đổi MK</span>'
-                  : "—";
+                  : "-";
                 const nvLink = u.nv_ten
                   ? `<span class="text-xs text-primary">${esc(u.nv_ten)}</span>`
-                  : '<span class="text-xs text-bodytext">—</span>';
+                  : '<span class="text-xs text-bodytext">-</span>';
                 const actions = `<div class="flex items-center gap-1">
           <button type="button" class="htql-table-action" onclick="openResetPwdModal('${u.id}','${esc(u.username)}')" title="Reset mật khẩu">
             <iconify-icon icon="solar:key-linear" width="18"></iconify-icon>
@@ -426,7 +426,7 @@ managerRoutes.get("/", async (c) => {
       htqlCloseModal('userPermModal');
       editingNvId = null;
     }
-    function permBoolLabel(v) { return v ? '✓' : '—'; }
+    function permBoolLabel(v) { return v ? '✓' : '-'; }
     async function openNvPermModal(nvId) {
       editingNvId = nvId;
       const res = await fetch('/manager/api/nhan-vien/' + encodeURIComponent(nvId) + '/perms');
@@ -434,7 +434,7 @@ managerRoutes.get("/", async (c) => {
       const data = await res.json();
       document.getElementById('userPermTitle').textContent = '🔐 ' + data.ten;
       document.getElementById('userPermHint').innerHTML =
-        'NV <b>' + data.id + '</b> — ' + data.ten + '. Tích &quot;Ghi đè&quot; để khác mặc định vai trò; bỏ tích = kế thừa.'
+        'NV <b>' + data.id + '</b> - ' + data.ten + '. Tích &quot;Ghi đè&quot; để khác mặc định vai trò; bỏ tích = kế thừa.'
         + (data.linked_username ? ' Tài khoản <b>' + data.linked_username + '</b> sẽ đồng bộ khi lưu.' : '');
       document.getElementById('userPermRole').value = data.role;
       userPermDefaults = data.defaults || {};
@@ -534,7 +534,7 @@ managerRoutes.get("/", async (c) => {
             </div>
             <div class="grid grid-cols-2 gap-3 pt-2">
               ${formGroup('Vai trò', select({ name: 'role', options: PERM_MATRIX_ROLES.map((r) => `<option value="${r}">${esc(ROLE_LABELS[r] || r)}</option>`).join('') }))}
-              ${formGroup('Liên kết NV', select({ name: 'nhan_vien_id', options: `<option value="">— Không liên kết —</option>${(nvsForSelect || []).map((nv) => `<option value="${nv.id}">${esc(nv.ten)} (${nv.id})</option>`).join('')}` }))}
+              ${formGroup('Liên kết NV', select({ name: 'nhan_vien_id', options: `<option value="">- Không liên kết -</option>${(nvsForSelect || []).map((nv) => `<option value="${nv.id}">${esc(nv.ten)} (${nv.id})</option>`).join('')}` }))}
             </div>
             <div class="flex items-center gap-2 pt-2">
               <input type="checkbox" name="must_change_password" id="cuCreateMustChange" checked class="w-4 h-4 rounded border-bordergray text-primary">

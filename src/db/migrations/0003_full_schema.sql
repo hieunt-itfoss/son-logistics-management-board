@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 -- 2. New tables (create BEFORE adding FK references)
 -- ============================================================
 
--- Staff (unified staff table — replaces tai_xe)
+-- Staff (unified staff table - replaces tai_xe)
 CREATE TABLE IF NOT EXISTS nhan_vien (
   id TEXT PRIMARY KEY,
   ten TEXT NOT NULL,
