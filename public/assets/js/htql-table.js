@@ -3,13 +3,18 @@
  * Each .htql-dt[data-htql-dt] gets its own instance.
  */
 (function () {
-  document.addEventListener("DOMContentLoaded", init);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 
   function init() {
     document.querySelectorAll(".htql-dt[data-htql-dt]").forEach(setupTable);
     document.querySelectorAll(".htql-search-input[data-auto-width]").forEach(autoWidthInput);
     document.querySelectorAll(".htql-search-input[data-auto-search]").forEach(setupAutoSearch);
   }
+
   function setupAutoSearch(input) {
     var form = input.closest("form");
     if (!form) return;
@@ -45,6 +50,42 @@
     input.style.width = (ch + 4) + "ch";
   }
 
+  function ensureColgroup(table, colCount) {
+    var colgroup = table.querySelector("colgroup");
+    if (!colgroup) {
+      colgroup = document.createElement("colgroup");
+      table.insertBefore(colgroup, table.firstChild);
+    }
+    while (colgroup.children.length < colCount) {
+      colgroup.appendChild(document.createElement("col"));
+    }
+    while (colgroup.children.length > colCount) {
+      colgroup.removeChild(colgroup.lastChild);
+    }
+    return colgroup;
+  }
+
+  function setColWidth(th, col, widthPx) {
+    var w = Math.max(40, widthPx) + "px";
+    th.style.width = w;
+    th.style.minWidth = w;
+    th.style.maxWidth = w;
+    if (col) col.style.width = w;
+  }
+
+  function syncTableWidth(table, colgroup) {
+    var total = 0;
+    Array.from(colgroup.children).forEach(function (col) {
+      var w = parseInt(col.style.width, 10);
+      if (!w) w = col.offsetWidth;
+      total += w || 0;
+    });
+    if (total > 0) {
+      table.style.width = total + "px";
+      table.style.minWidth = "100%";
+    }
+  }
+
   function setupTable(root) {
     var table = root.querySelector("table");
     if (!table) return;
@@ -55,6 +96,8 @@
     var ths = Array.from(headerRow.querySelectorAll("th"));
     var tbody = table.querySelector("tbody");
     if (!tbody) return;
+
+    var colgroup = ensureColgroup(table, ths.length);
 
     var allRows = Array.from(tbody.querySelectorAll("tr:not(.htql-dt-totals)"));
     var groupRows = [];
@@ -71,6 +114,11 @@
     var sortDir = 0;
 
     ths.forEach(function (th, colIdx) {
+      var col = colgroup.children[colIdx];
+      if (!th.style.width && th.offsetWidth > 0) {
+        setColWidth(th, col, th.offsetWidth);
+      }
+
       if (th.classList.contains("htql-dt-sortable")) {
         th.addEventListener("click", function (e) {
           if (e.target.closest(".htql-dt-resize")) return;
@@ -85,9 +133,10 @@
         });
       }
 
-      setupResize(th, table);
+      setupResize(th, table, col, colgroup);
     });
 
+    syncTableWidth(table, colgroup);
     setupGroupToggle(table);
   }
 
@@ -153,36 +202,47 @@
   }
 
   /* ── Column resize ──────────────────────────────────────── */
-  function setupResize(th, table) {
-    if (th.style.width === "" && th.offsetWidth > 0) {
-      th.style.width = th.offsetWidth + "px";
-    }
+  function setupResize(th, table, col, colgroup) {
+    if (th.querySelector(".htql-dt-resize")) return;
 
     var handle = document.createElement("div");
     handle.className = "htql-dt-resize";
+    handle.setAttribute("role", "separator");
+    handle.setAttribute("aria-orientation", "vertical");
+    handle.setAttribute("aria-label", "Resize column");
     th.style.position = "relative";
     th.appendChild(handle);
 
     var startX, startW;
 
-    handle.addEventListener("mousedown", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      startX = e.pageX;
+    function applyWidth(newW) {
+      setColWidth(th, col, newW);
+      syncTableWidth(table, colgroup);
+    }
+
+    function startDrag(clientX) {
+      startX = clientX;
       startW = th.offsetWidth;
       handle.classList.add("htql-dt-resizing");
       table.classList.add("htql-dt-col-resizing");
+    }
+
+    function endDrag() {
+      handle.classList.remove("htql-dt-resizing");
+      table.classList.remove("htql-dt-col-resizing");
+    }
+
+    handle.addEventListener("mousedown", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      startDrag(e.pageX);
 
       function onMove(ev) {
-        var diff = ev.pageX - startX;
-        var newW = Math.max(40, startW + diff);
-        th.style.width = newW + "px";
-        th.style.minWidth = newW + "px";
+        applyWidth(startW + (ev.pageX - startX));
       }
 
       function onUp() {
-        handle.classList.remove("htql-dt-resizing");
-        table.classList.remove("htql-dt-col-resizing");
+        endDrag();
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
       }
@@ -192,31 +252,25 @@
     });
 
     handle.addEventListener("touchstart", function (e) {
+      e.preventDefault();
       e.stopPropagation();
       var touch = e.touches[0];
-      startX = touch.pageX;
-      startW = th.offsetWidth;
-      handle.classList.add("htql-dt-resizing");
-      table.classList.add("htql-dt-col-resizing");
+      startDrag(touch.pageX);
 
       function onMove(ev) {
         var t = ev.touches[0];
-        var diff = t.pageX - startX;
-        var newW = Math.max(40, startW + diff);
-        th.style.width = newW + "px";
-        th.style.minWidth = newW + "px";
+        applyWidth(startW + (t.pageX - startX));
       }
 
       function onUp() {
-        handle.classList.remove("htql-dt-resizing");
-        table.classList.remove("htql-dt-col-resizing");
+        endDrag();
         document.removeEventListener("touchmove", onMove);
         document.removeEventListener("touchend", onUp);
       }
 
-      document.addEventListener("touchmove", onMove);
+      document.addEventListener("touchmove", onMove, { passive: false });
       document.addEventListener("touchend", onUp);
-    }, { passive: true });
+    }, { passive: false });
   }
 
   /* ── Sort ────────────────────────────────────────────────── */
