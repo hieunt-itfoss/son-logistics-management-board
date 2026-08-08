@@ -125,14 +125,14 @@ function fmtNum(n: number): string {
 }
 
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return '\u2014';
+  if (!d) return '-';
   const parts = d.split('-');
   if (parts.length < 3) return d;
   return `${parts[2]}/${parts[1]}`;
 }
 
 function fmtDateFull(d: string | null | undefined): string {
-  if (!d) return '\u2014';
+  if (!d) return '-';
   const parts = d.split('-');
   if (parts.length < 3) return d;
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -212,7 +212,7 @@ const LO_HANG_SQL = `
   LEFT JOIN nhan_vien nv2 ON lh.nguoi_thu = nv2.id
 `;
 
-// ─── GET / — Main Grid ───────────────────────────────────────
+// ─── GET / - Main Grid ───────────────────────────────────────
 loHangRoutes.get('/', async (c) => {
   const user = c.get('user');
   const role = user.role as Role;
@@ -268,7 +268,7 @@ loHangRoutes.get('/', async (c) => {
   }
   // 'all' = no date filter
 
-  // Column filter — supports multiple columns at once.
+  // Column filter - supports multiple columns at once.
   // Source: 'filters' param (JSON [{c,v}]) + legacy fc/fv pair (backward compatible).
   const activeFilters: { c: string; v: string }[] = [];
   const filtersParam = c.req.query('filters') || '';
@@ -430,7 +430,7 @@ loHangRoutes.get('/', async (c) => {
   // ─── Build HTML ────────────────────────────────────────────
   let html = '<div class="htql-dt" data-htql-dt>';
 
-  // Bulk action bar — light green background, hidden until rows are selected
+  // Bulk action bar - light green background, hidden until rows are selected
   html += `<div id="bulkBar" class="hidden htql-bulkbar">
     <label class="flex items-center gap-2 font-semibold mr-2 cursor-pointer">
       <input type="checkbox" id="bulkBarChk" class="rounded border-success" checked>
@@ -591,7 +591,7 @@ loHangRoutes.get('/', async (c) => {
     });
     const fmtCcyMulti = (m: Record<string, number>) => {
       const arr = Object.entries(m).filter(([, v]) => v > 0).map(([t, v]) => `${fmtNum(v)} <span class="text-xs text-bodytext dark:text-darklink">${t}</span>`);
-      return arr.length ? arr.join('<br>') : '\u2014';
+      return arr.length ? arr.join('<br>') : '-';
     };
 
     const isCollapsed = collapsed.has(chuyenId);
@@ -610,8 +610,8 @@ loHangRoutes.get('/', async (c) => {
       const tdCls = isHang ? ' htql-col-hang' : isMoney ? ' htql-col-money' : '';
       let v = '';
       if (col === 'ma') v = isNoChuyen ? `<strong class="text-warning">Chưa chuyến (${chLots.length})</strong>` : `<strong>${esc(chuyenId)}</strong>`;
-      else if (col === 'ngayLenXe') v = firstLo?.ngay_di ? fmtDate(firstLo.ngay_di) : '\u2014';
-      else if (col === 'ngayVe') v = firstLo?.ngay_den ? fmtDate(firstLo.ngay_den) : '\u2014';
+      else if (col === 'ngayLenXe') v = firstLo?.ngay_di ? fmtDate(firstLo.ngay_di) : '-';
+      else if (col === 'ngayVe') v = firstLo?.ngay_den ? fmtDate(firstLo.ngay_den) : '-';
       else if (col === 'soXe') v = esc(firstLo?.so_xe);
       else if (col === 'bienSo') v = esc(firstLo?.bien_so);
       else if (col === 'tuyenVT') v = firstLo?.tuyen_ten
@@ -648,19 +648,19 @@ loHangRoutes.get('/', async (c) => {
               sortVal = lo.id;
               break;
             case 'ngayLenXe':
-              v = lo.ngay_di ? `<a href="${buildGridUrl(c,{fc:'ngayLenXe',fv:lo.ngay_di})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_di)}</a>` : '<span class="text-warning">\u2014 (chưa)</span>';
+              v = lo.ngay_di ? `<a href="${buildGridUrl(c,{fc:'ngayLenXe',fv:lo.ngay_di})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_di)}</a>` : '<span class="text-warning">- (chưa)</span>';
               sortVal = lo.ngay_di || '';
               break;
             case 'ngayVe':
-              v = lo.ngay_den ? `<a href="${buildGridUrl(c,{fc:'ngayVe',fv:lo.ngay_den})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_den)}</a>` : '<span class="text-warning">\u2014 (chưa)</span>';
+              v = lo.ngay_den ? `<a href="${buildGridUrl(c,{fc:'ngayVe',fv:lo.ngay_den})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_den)}</a>` : '<span class="text-warning">- (chưa)</span>';
               sortVal = lo.ngay_den || '';
               break;
             case 'soXe':
-              v = lo.so_xe ? `<a href="${buildGridUrl(c,{fc:'soXe',fv:lo.so_xe})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.so_xe)}</a>` : '<span class="text-bodytext dark:text-darklink">\u2014</span>';
+              v = lo.so_xe ? `<a href="${buildGridUrl(c,{fc:'soXe',fv:lo.so_xe})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.so_xe)}</a>` : '<span class="text-bodytext dark:text-darklink">-</span>';
               sortVal = lo.so_xe || '';
               break;
             case 'bienSo':
-              v = lo.bien_so ? `<a href="${buildGridUrl(c,{fc:'bienSo',fv:lo.bien_so})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.bien_so)}</a>` : '<span class="text-bodytext dark:text-darklink">\u2014</span>';
+              v = lo.bien_so ? `<a href="${buildGridUrl(c,{fc:'bienSo',fv:lo.bien_so})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.bien_so)}</a>` : '<span class="text-bodytext dark:text-darklink">-</span>';
               sortVal = lo.bien_so || '';
               break;
             case 'tuyenVT':
@@ -676,11 +676,11 @@ loHangRoutes.get('/', async (c) => {
               sortVal = lo.khach_hang_ten || '';
               break;
             case 'nguoiTao':
-              v = lo.nguoi_tao_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiTao',fv:lo.nguoi_tao})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_tao_ten)}</a>` : '\u2014';
+              v = lo.nguoi_tao_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiTao',fv:lo.nguoi_tao})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_tao_ten)}</a>` : '-';
               sortVal = lo.nguoi_tao_ten || '';
               break;
             case 'nguoiThu':
-              v = lo.nguoi_thu_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiThu',fv:lo.nguoi_thu})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_thu_ten)}</a>` : '\u2014';
+              v = lo.nguoi_thu_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiThu',fv:lo.nguoi_thu})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_thu_ten)}</a>` : '-';
               sortVal = lo.nguoi_thu_ten || '';
               break;
             case 'soKien':
@@ -700,7 +700,7 @@ loHangRoutes.get('/', async (c) => {
               sortVal = String(luuKho);
               break;
             case 'ghiChu':
-              v = lo.ly_do_thieu ? `<span class="text-xs">${esc(lo.ly_do_thieu)}</span>` : '\u2014';
+              v = lo.ly_do_thieu ? `<span class="text-xs">${esc(lo.ly_do_thieu)}</span>` : '-';
               sortVal = lo.ly_do_thieu || '';
               break;
             case 'donGia':
@@ -716,7 +716,7 @@ loHangRoutes.get('/', async (c) => {
             case 'soTienHang':
               v = (lo.so_tien_hang > 0)
                 ? `${fmtNum(lo.so_tien_hang)} <span class="text-xs text-bodytext dark:text-darklink">${esc(lo.tien_te_th || lo.tien_te)}</span>`
-                : '\u2014';
+                : '-';
               sortVal = String(lo.so_tien_hang || 0);
               break;
           }
@@ -1162,7 +1162,7 @@ loHangRoutes.get('/', async (c) => {
           ` }), { labelClass: FILTER_LABEL_CLASS })}
         ${formField('Ngày thu', `
           ${input({ type: 'date', id: 'bulkTTNgay' })}
-          <p id="bulkTTWarn" class="hidden text-xs text-error mt-1">⚠ Ngày quá khứ — sẽ làm thay đổi số dư/chốt sổ các ngày sau.</p>
+          <p id="bulkTTWarn" class="hidden text-xs text-error mt-1">⚠ Ngày quá khứ - sẽ làm thay đổi số dư/chốt sổ các ngày sau.</p>
         `, { labelClass: FILTER_LABEL_CLASS })}
         ${formField('Hình thức', select({ id: 'bulkTTHinhThuc', options: `
             <option value="TM">Tiền mặt</option>
@@ -1391,7 +1391,7 @@ loHangRoutes.get('/', async (c) => {
   return c.html(layout('Phiếu', html, user, 'lo-hang'));
 });
 
-// ─── GET /create — Create Form ────────────────────────────────
+// ─── GET /create - Create Form ────────────────────────────────
 loHangRoutes.get('/create', async (c) => {
   const user = c.get('user');
   const perm = loHangPerm(c.get('perms'));
@@ -1481,7 +1481,7 @@ loHangRoutes.get('/create', async (c) => {
   return c.html(layout('Tạo phiếu', html, user, 'lo-hang'));
 });
 
-// ─── GET /:id — Detail View ──────────────────────────────────
+// ─── GET /:id - Detail View ──────────────────────────────────
 loHangRoutes.get('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
@@ -1544,7 +1544,7 @@ loHangRoutes.get('/:id', async (c) => {
     <div class="px-6 py-5 text-white">
       <h1 class="text-xl font-bold mb-1">${esc(lo.id)}</h1>
       <div class="text-sm opacity-90">
-        ${lo.khach_hang_ten ? esc(lo.khach_hang_ten) : '\u2014'} \u00B7 ${lo.hang_ten ? esc(lo.hang_ten) : '\u2014'} \u00B7 ${lo.ngay_di ? fmtDate(lo.ngay_di) : '\u2014'}
+        ${lo.khach_hang_ten ? esc(lo.khach_hang_ten) : '-'} \u00B7 ${lo.hang_ten ? esc(lo.hang_ten) : '-'} \u00B7 ${lo.ngay_di ? fmtDate(lo.ngay_di) : '-'}
       </div>
       <div class="flex flex-wrap gap-2 mt-3">
         ${lo.tuyen_ten ? `<span class="bg-white/20 px-3 py-1 rounded-full text-xs">${esc(lo.tuyen_ten)}</span>` : ''}
@@ -1569,17 +1569,17 @@ loHangRoutes.get('/:id', async (c) => {
     </h3>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">`;
   html += infoRow('Mã phiếu', `<strong>${esc(lo.id)}</strong>`);
-  html += infoRow('Khách hàng', lo.khach_hang_ten ? `${esc(lo.khach_hang_ten)} (${esc(lo.ma_kh)})` : '\u2014');
-  html += infoRow('Hãng giao', lo.hang_ten ? esc(lo.hang_ten) : '\u2014');
+  html += infoRow('Khách hàng', lo.khach_hang_ten ? `${esc(lo.khach_hang_ten)} (${esc(lo.ma_kh)})` : '-');
+  html += infoRow('Hãng giao', lo.hang_ten ? esc(lo.hang_ten) : '-');
   if (lo.chuyen_xe_id) {
-    html += infoRow('Chuyến xe', `${esc(lo.chuyen_xe_id)} \u00B7 ${esc(lo.so_xe||'?')} (${esc(lo.bien_so||'?')}) \u00B7 ${esc(lo.tuyen_ten||'\u2014')}`);
+    html += infoRow('Chuyến xe', `${esc(lo.chuyen_xe_id)} \u00B7 ${esc(lo.so_xe||'?')} (${esc(lo.bien_so||'?')}) \u00B7 ${esc(lo.tuyen_ten||'-')}`);
     html += infoRow('Ngày đi \u2192 về', `${fmtDateFull(lo.ngay_di)} \u2192 ${fmtDateFull(lo.ngay_den)}`);
   }
   html += infoRow('Đơn giá', lo.don_gia > 0 ? `${fmtNum(lo.don_gia)} ${lo.tien_te} \u00D7 ${lo.so_kien} kiện = <strong>${fmtNum(lo.thanh_tien)} ${lo.tien_te}</strong>` : '<em class="text-gray-400">tổng</em>');
   if (lo.giam_gia > 0) html += infoRow('Giảm giá', `${fmtNum(lo.giam_gia)} ${lo.tien_te}`);
   if (lo.ly_do_thieu) html += infoRow('Lý do thiếu', `<span class="text-yellow-700">${esc(lo.ly_do_thieu)}</span>`);
-  html += infoRow('Người tạo', lo.nguoi_tao_ten ? esc(lo.nguoi_tao_ten) : '\u2014');
-  html += infoRow('Người thu', lo.nguoi_thu_ten ? esc(lo.nguoi_thu_ten) : '\u2014');
+  html += infoRow('Người tạo', lo.nguoi_tao_ten ? esc(lo.nguoi_tao_ten) : '-');
+  html += infoRow('Người thu', lo.nguoi_thu_ten ? esc(lo.nguoi_thu_ten) : '-');
   html += `</div></div>`;
 
   // Related receipt slips
@@ -1686,7 +1686,7 @@ loHangRoutes.get('/:id', async (c) => {
   return c.html(layout('Phiếu: ' + id, html, user, 'lo-hang'));
 });
 
-// ─── POST /api/lo-hang — Create ──────────────────────────────
+// ─── POST /api/lo-hang - Create ──────────────────────────────
 loHangRoutes.post('/api/lo-hang', async (c) => {
   const user = c.get('user');
   const body = await c.req.json<{
@@ -1772,7 +1772,7 @@ loHangRoutes.post('/api/lo-hang', async (c) => {
   return c.json({ id }, 201);
 });
 
-// ─── PUT /api/lo-hang/:id — Update ───────────────────────────
+// ─── PUT /api/lo-hang/:id - Update ───────────────────────────
 loHangRoutes.put('/api/lo-hang/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
@@ -1831,7 +1831,7 @@ loHangRoutes.put('/api/lo-hang/:id', async (c) => {
   return c.json({ success: true });
 });
 
-// ─── DELETE /api/lo-hang/:id — Delete ────────────────────────
+// ─── DELETE /api/lo-hang/:id - Delete ────────────────────────
 loHangRoutes.delete('/api/lo-hang/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
@@ -1852,7 +1852,7 @@ loHangRoutes.delete('/api/lo-hang/:id', async (c) => {
   return c.json({ success: true });
 });
 
-// ─── POST /api/lo-hang/bulk — Bulk Operations ────────────────
+// ─── POST /api/lo-hang/bulk - Bulk Operations ────────────────
 loHangRoutes.post('/api/lo-hang/bulk', async (c) => {
   const user = c.get('user');
   const body = await c.req.json<{
@@ -1958,9 +1958,9 @@ loHangRoutes.post('/api/lo-hang/bulk', async (c) => {
   return c.json({ error: 'Unknown action' }, 400);
 });
 
-// ─── POST /api/lo-hang/bulk-thanh-toan — Mark as paid ───
+// ─── POST /api/lo-hang/bulk-thanh-toan - Mark as paid ───
 // Create receipt slips (kieu_qt='trahet') grouped by customer + category + currency; or
-// mark "paid outside ledger" (admin only) — no receipt slip, visible to admin only.
+// mark "paid outside ledger" (admin only) - no receipt slip, visible to admin only.
 loHangRoutes.post('/api/lo-hang/bulk-thanh-toan', async (c) => {
   const user = c.get('user');
   const body = await c.req.json<{
@@ -1973,7 +1973,7 @@ loHangRoutes.post('/api/lo-hang/bulk-thanh-toan', async (c) => {
   const ids = body.ids || [];
   if (ids.length === 0) return c.json({ error: 'Chưa chọn phiếu' }, 400);
 
-  // Case C: paid outside ledger — admin only
+  // Case C: paid outside ledger - admin only
   if (body.khongVaoSo) {
     if (user.role !== 'admin') return c.json({ error: 'Chỉ admin được đánh dấu thanh toán ngoài sổ' }, 403);
     for (const id of ids) {

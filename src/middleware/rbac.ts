@@ -52,7 +52,7 @@ export function getDefaultHomePath(role: Role): string {
   return RESOURCE_HOME[tabs[0]] ?? "/lo-hang";
 }
 
-/** Block pages/APIs outside the role's allowed tabs (users.role — not overridable). */
+/** Block pages/APIs outside the role's allowed tabs (users.role - not overridable). */
 export const rbacMiddleware = createMiddleware<{
   Bindings: Env;
   Variables: AppVariables;

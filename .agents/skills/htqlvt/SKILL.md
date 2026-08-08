@@ -11,7 +11,7 @@ Vietnamese transport management system (Hệ thống Quản lý Vận tải) for
 | Layer | Technology |
 |-------|-----------|
 | Runtime | Cloudflare Workers (`compatibility_date: 2026-05-18`, `nodejs_compat`) |
-| Framework | Hono v4 (`hono`) — typed context |
+| Framework | Hono v4 (`hono`) - typed context |
 | Database | Cloudflare D1 (SQLite) via `wrangler` migrations |
 | UI | TailwindAdmin layout + Tailwind CSS v4 + `theme.css`, plain HTML SSR (no React/JSX) |
 | Icons | Iconify Solar (`iconify-icon`) |
@@ -35,7 +35,7 @@ he-thong-quan-ly/
 │   │   └── seed.sql
 │   └── utils/
 │       ├── layout.ts         # TailwindAdmin shell: sidebar, topbar, role nav
-│       └── ui.ts             # SSR UI helpers — see Design System below
+│       └── ui.ts             # SSR UI helpers - see Design System below
 ├── DESIGN.md                 # Full design system doc
 ├── public/assets/
 │   ├── tailwind/tailwind.css # Compiled CSS (run npm run build:css after edits)
@@ -85,7 +85,7 @@ Inline `<script>` at end of page content. Vanilla JS + `fetch()`, `location.relo
 
 ## Authentication
 
-- Session cookie via middleware helpers (`setSessionCookie` / `clearSessionCookie`) — never construct cookie strings manually
+- Session cookie via middleware helpers (`setSessionCookie` / `clearSessionCookie`) - never construct cookie strings manually
 - Password: HMAC-SHA256 with `SESSION_SECRET`; auto-upgrades plaintext on first login
 - **6 roles:** `admin`, `ketoanTruong`, `ketoanVien`, `nhanvien`, `kho`, `laixe`
 - Access: `const user = c.get('user')` in protected routes
@@ -107,20 +107,20 @@ Default login: `admin` / `admin123`
 
 ## Anti-Patterns
 
-- **NEVER** reference `tai_xe` table in UI — use `nhan_vien WHERE vai_tro = 'laixe'`
-- **NEVER** duplicate `layout()` per route — use `src/utils/layout.ts`
+- **NEVER** reference `tai_xe` table in UI - use `nhan_vien WHERE vai_tro = 'laixe'`
+- **NEVER** duplicate `layout()` per route - use `src/utils/layout.ts`
 - **NEVER** use React/JSX or `cdn.tailwindcss.com`
 - **NEVER** use `as any`, `@ts-ignore`, `@ts-expect-error`
-- **NEVER** use Node.js `crypto` — use Web Crypto in Workers runtime
-- **NEVER** use `INSERT OR REPLACE` for upserts — use `INSERT OR IGNORE` (FK-safe)
+- **NEVER** use Node.js `crypto` - use Web Crypto in Workers runtime
+- **NEVER** use `INSERT OR REPLACE` for upserts - use `INSERT OR IGNORE` (FK-safe)
 
 ---
 
 ## Design System
 
 > **Stack:** TailwindAdmin layout + Tatem tokens. SSR HTML only (no React).
-> **Visual:** Midnight-terminal clarity — cool, precise, dark-mode-first with Cerulean Accent (`#007eed`).
-> **Source:** `DESIGN.md` — read for full detail when building UI.
+> **Visual:** Midnight-terminal clarity - cool, precise, dark-mode-first with Cerulean Accent (`#007eed`).
+> **Source:** `DESIGN.md` - read for full detail when building UI.
 > **Similar brands:** Linear, Raycast, Notion (dark), Supabase (dark), Vercel (dark).
 
 ### Design File Map
@@ -131,7 +131,7 @@ Default login: `admin` / `admin123`
 | Reusable HTML fragments + modals | `src/utils/ui.ts` |
 | Shared modal CSS (`.htql-modal-*`) | `public/assets/css/theme.css` |
 | Shared modal JS (open/close/drag) | `public/assets/js/htql-modal.js` |
-| TailwindAdmin compiled CSS | `public/assets/tailwind/tailwind.css` — run `npm run build:css` after editing |
+| TailwindAdmin compiled CSS | `public/assets/tailwind/tailwind.css` - run `npm run build:css` after editing |
 | HTQLVT overrides (font, tokens) | `public/assets/css/theme.css` |
 | Icons | Iconify Solar (`iconify-icon`) |
 
@@ -146,7 +146,7 @@ Default login: `admin` / `admin123`
 | Obsidian Grey | `#606060` | Tertiary text, subtle backgrounds, borders |
 | Charcoal Black | `#3b3b3b` | Card/element backgrounds (dark), dividers |
 | Mist Grey | `#c2c2c2` | Hover states on neutral elements |
-| Cerulean Accent | `#007eed` | Interactive elements, links, active states — **only saturated color** |
+| Cerulean Accent | `#007eed` | Interactive elements, links, active states - **only saturated color** |
 
 ### TailwindAdmin Token Mapping
 
@@ -217,13 +217,13 @@ Open: `htqlOpenModal('id')`. Close: `htqlCloseModal('id')`.
 Built-in: backdrop click dismiss, Escape key, header drag-to-move, body scroll lock, z-index 70.
 
 Footer patterns:
-- `modalFooterInner(...)` — right-aligned buttons
-- `modalFooterSplit(leftHtml, rightHtml)` — delete left + save/cancel right
+- `modalFooterInner(...)` - right-aligned buttons
+- `modalFooterSplit(leftHtml, rightHtml)` - delete left + save/cancel right
 
 ### Dark Mode
 
 - Toggle adds/removes `.dark` on `<html>`, persists in `localStorage` key `htqlvt-theme`
-- **All new UI must include `dark:` variants** — never use bare `text-gray-*`, `bg-white`, `border-gray-*`
+- **All new UI must include `dark:` variants** - never use bare `text-gray-*`, `bg-white`, `border-gray-*`
 - Modals are fully dark-safe via `.htql-modal-*` classes (theme tokens, not hardcoded colors)
 
 ### Do / Don't

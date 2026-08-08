@@ -128,7 +128,7 @@ congCuRoutes.get('/', async (c) => {
           <a href="/cong-cu/api/export/luong" class="text-sm text-blue-600 hover:underline">👥 Bảng lương nhân viên</a>
           <a href="/cong-cu/api/export/thu-chi" class="text-sm text-blue-600 hover:underline">📒 Sổ thu chi</a>
         </div>
-        <p class="text-xs text-gray-400 mt-2">File CSV UTF-8 — mở bằng Excel: Data › From Text/CSV để giữ tiếng Việt.</p>
+        <p class="text-xs text-gray-400 mt-2">File CSV UTF-8 - mở bằng Excel: Data › From Text/CSV để giữ tiếng Việt.</p>
       </div>
 
       <div class="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
@@ -151,7 +151,7 @@ congCuRoutes.get('/', async (c) => {
 
       <div class="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow col-span-full" style="background:#dcfce7">
         <div class="font-semibold text-green-700 text-lg mb-2">☁ Đồng bộ Google Sheets (Apps Script)</div>
-        <div class="text-sm text-green-800">Dùng Google Apps Script để đồng bộ dữ liệu D1 với Google Sheets — dễ hơn code API xuất Excel.</div>
+        <div class="text-sm text-green-800">Dùng Google Apps Script để đồng bộ dữ liệu D1 với Google Sheets - dễ hơn code API xuất Excel.</div>
         <div class="mt-2 text-xs text-green-700"><b>Các bước:</b> Tạo Google Sheet → Extensions > Apps Script → Copy mã → Deploy → Set trigger hàng ngày.</div>
       </div>
     </div>

@@ -29,7 +29,7 @@ function fmtNum(n: number): string {
 }
 
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return '\u2014';
+  if (!d) return '-';
   const p = d.split('-');
   if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
   return d;
@@ -83,7 +83,7 @@ async function genMaChuyen(
 // ─── Routes ─────────────────────────────────────────────────────────
 export const chuyenXeRoutes = new Hono<{ Bindings: Env }>();
 
-// ===================== GET / — List =================================
+// ===================== GET / - List =================================
 chuyenXeRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -195,17 +195,18 @@ chuyenXeRoutes.get('/', async (c) => {
       : badge('Chưa TT', 'warning');
     const mauClass = ch.tuyen_mau === 'blue' ? 'bg-lightprimary text-primary' : ch.tuyen_mau === 'green' ? 'bg-lightsuccess text-success' : ch.tuyen_mau === 'amber' ? 'bg-lightwarning text-warning' : 'bg-lightgray text-bodytext';
     return tableRow([
+      `<input type="checkbox" class="cx-check rounded border-bordergray" value="${esc(ch.id)}">`,
       `<a href="/chuyen-xe/${esc(ch.id)}" class="text-primary hover:underline font-semibold font-mono">${esc(ch.id)}</a>`,
       esc(ch.so_xe),
       esc(ch.bien_so),
       `<span class="inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${mauClass}">${esc(ch.tuyen_ten)}</span>`,
-      esc(ch.cty_vt_ten || '—'),
-      esc(ch.tai_xe_ten || '—'),
+      esc(ch.cty_vt_ten || '-'),
+      esc(ch.tai_xe_ten || '-'),
       fmtDate(ch.ngay_di),
       fmtDate(ch.ngay_den),
       `<span class="tabular-nums">${fmtNum(ch.total_kien)}</span>`,
       `<span class="font-semibold tabular-nums">${fmtNum(ch.gia_chuyen)} ${ch.tien_te}</span>`,
-      `<span class="truncate max-w-[120px] inline-block">${esc(ch.so_sent_va_gt) || '—'}</span>`,
+      `<span class="truncate max-w-[120px] inline-block">${esc(ch.so_sent_va_gt) || '-'}</span>`,
       payTag,
       ttTag,
       `<div class="flex items-center justify-center">${tableActionLink(`/chuyen-xe/create?edit=${esc(ch.id)}`)}</div>`,
@@ -232,13 +233,13 @@ chuyenXeRoutes.get('/', async (c) => {
           ${formField('T\u1eeb', input({ type: 'date', name: 'from', value: esc(from), class: 'w-auto' }), { labelClass: FILTER_LABEL_CLASS })}
           ${formField('\u0110\u1ebfn', input({ type: 'date', name: 'to', value: esc(to), class: 'w-auto' }), { labelClass: FILTER_LABEL_CLASS })}
         </div>
-        ${formField('Số xe', select({ name: 'xe', class: 'w-auto', options: `<option value="">— Tất cả —</option>${xeOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Biển số', select({ name: 'bien_so', class: 'w-auto', options: `<option value="">— Tất cả —</option>${bienSoOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Tuyến', select({ name: 'tuyen', class: 'w-auto', options: `<option value="">— Tất cả —</option>${tuyenOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Cty VT', select({ name: 'cty_vt', class: 'w-auto', options: `<option value="">— Tất cả —</option>${ctyVtOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Tài xế', select({ name: 'tai_xe', class: 'w-auto', options: `<option value="">— Tất cả —</option>${taiXeOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Số xe', select({ name: 'xe', class: 'w-auto', options: `<option value="">(Tất cả)</option>${xeOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Biển số', select({ name: 'bien_so', class: 'w-auto', options: `<option value="">(Tất cả)</option>${bienSoOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Tuyến', select({ name: 'tuyen', class: 'w-auto', options: `<option value="">(Tất cả)</option>${tuyenOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Cty VT', select({ name: 'cty_vt', class: 'w-auto', options: `<option value="">(Tất cả)</option>${ctyVtOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Tài xế', select({ name: 'tai_xe', class: 'w-auto', options: `<option value="">(Tất cả)</option>${taiXeOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
         ${formField('Trạng thái', select({ name: 'status', class: 'w-auto', options: `
-            <option value="">— Tất cả —</option>
+            <option value="">(Tất cả)</option>
             <option value="planned"${statusFilter === 'planned' ? ' selected' : ''}>Kế hoạch</option>
             <option value="dang_chay"${statusFilter === 'dang_chay' ? ' selected' : ''}>Đang chạy</option>
             <option value="hoan_thanh"${statusFilter === 'hoan_thanh' ? ' selected' : ''}>Hoàn thành</option>
@@ -254,9 +255,30 @@ chuyenXeRoutes.get('/', async (c) => {
       </div>
     </div>
 
+    <div id="cxBulkBar" class="hidden htql-bulkbar mb-4">
+      <label class="flex items-center gap-2 font-semibold mr-2 cursor-pointer">
+        <input type="checkbox" id="cxBulkBarChk" class="rounded border-success" checked>
+        <span id="cxBulkCount">0 chuyến đã chọn:</span>
+      </label>
+      <button type="button" onclick="cxBulkDaVe()" class="htql-bulk-btn">Đã về (set ngày về)</button>
+      <button type="button" onclick="cxBulkThanhToan()" class="htql-bulk-btn">Thanh toán cước</button>
+      <button type="button" onclick="cxBulkUng()" class="htql-bulk-btn">Ứng cước</button>
+      <button type="button" onclick="cxBulkDelete()" class="htql-bulk-btn htql-bulk-danger">Xóa chuyến</button>
+      <button type="button" onclick="cxClearSelection()" class="htql-bulk-btn ml-auto">Bỏ chọn tất cả</button>
+    </div>
+    <style>
+      .htql-bulkbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#e7f6ec;border:1px solid #b7e4c7;color:#1a7440;border-radius:8px;padding:8px 12px;font-size:13px}
+      .dark .htql-bulkbar{background:#10271b;border-color:#1f5135;color:#7ee2a8}
+      .htql-bulk-btn{border:1px solid #b7e4c7;color:#1a7440;background:#fff;border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer}
+      .htql-bulk-btn:hover{background:#d7f0e0}
+      .dark .htql-bulk-btn{background:#0d1f15;border-color:#1f5135;color:#7ee2a8}
+      .htql-bulk-danger{border-color:#f2b8b5;color:#c0392b}
+      .htql-bulk-danger:hover{background:#fde8e6}
+    </style>
+
     ${dataTable(
-      ['Mã chuyến', 'Số xe', 'Biển số', 'Tuyến', 'Cty VT', 'Tài xế', 'Ngày đi', 'Ngày về', 'Kiện', 'Giá chuyến', 'SENT/GT', 'TT cty VT', 'Trạng thái', ''],
-      rows || tableEmpty(14),
+      ['<input type="checkbox" id="cxSelectAll" class="rounded border-bordergray" title="Chọn tất cả">', 'Mã chuyến', 'Số xe', 'Biển số', 'Tuyến', 'Cty VT', 'Tài xế', 'Ngày đi', 'Ngày về', 'Kiện', 'Giá chuyến', 'SENT/GT', 'TT cty VT', 'Trạng thái', ''],
+      rows || tableEmpty(15),
       { align: 'center' },
     )}
     <div class="card mt-0 rounded-t-none border-t-0 -mt-6">
@@ -271,12 +293,107 @@ chuyenXeRoutes.get('/', async (c) => {
     document.getElementById('filterRange')?.addEventListener('change', function() {
       document.getElementById('customDateWrap')?.classList.toggle('hidden', this.value !== 'custom');
     });
+
+    function cxSelectedIds() {
+      return Array.from(document.querySelectorAll('.cx-check:checked')).map(function(cb) { return cb.value; });
+    }
+
+    function cxUpdateBulkBar() {
+      const ids = cxSelectedIds();
+      const bar = document.getElementById('cxBulkBar');
+      const cnt = document.getElementById('cxBulkCount');
+      if (!bar || !cnt) return;
+      if (ids.length) {
+        bar.classList.remove('hidden');
+        cnt.textContent = ids.length + ' chuyến đã chọn:';
+      } else {
+        bar.classList.add('hidden');
+      }
+      const sa = document.getElementById('cxSelectAll');
+      const all = document.querySelectorAll('.cx-check');
+      if (sa && all.length) sa.checked = ids.length === all.length;
+    }
+
+    document.getElementById('cxSelectAll')?.addEventListener('change', function() {
+      document.querySelectorAll('.cx-check').forEach(function(cb) { cb.checked = this.checked; }.bind(this));
+      cxUpdateBulkBar();
+    });
+
+    document.querySelectorAll('.cx-check').forEach(function(cb) {
+      cb.addEventListener('change', cxUpdateBulkBar);
+    });
+
+    document.getElementById('cxBulkBarChk')?.addEventListener('change', function() {
+      if (!this.checked) cxClearSelection();
+    });
+
+    window.cxClearSelection = function() {
+      document.querySelectorAll('.cx-check').forEach(function(cb) { cb.checked = false; });
+      const sa = document.getElementById('cxSelectAll');
+      if (sa) sa.checked = false;
+      cxUpdateBulkBar();
+    };
+
+    async function cxBulkPost(action, extra) {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      const payload = Object.assign({ action: action, ids: ids }, extra || {});
+      const res = await fetch('/chuyen-xe/api/chuyen-xe/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (action === 'delete' && data.skipped > 0) {
+          alert('Đã xóa ' + data.count + ' chuyến. Bỏ qua ' + data.skipped + ' chuyến còn phiếu hàng.');
+        }
+        location.reload();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Lỗi');
+      }
+    }
+
+    window.cxBulkDaVe = function() {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      const ngay = prompt('Ngày về cho ' + ids.length + ' chuyến (YYYY-MM-DD), để trống = hôm nay:', new Date().toISOString().slice(0, 10));
+      if (ngay === null) return;
+      cxBulkPost('da-ve', { ngay: ngay || undefined });
+    };
+
+    window.cxBulkThanhToan = function() {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      if (!confirm('Tạo phiếu chi thanh toán cước cho ' + ids.length + ' chuyến?')) return;
+      const ngay = prompt('Ngày phiếu chi (YYYY-MM-DD), để trống = hôm nay:', new Date().toISOString().slice(0, 10));
+      if (ngay === null) return;
+      cxBulkPost('thanh-toan', { ngay: ngay || undefined, hinhThuc: 'TM' });
+    };
+
+    window.cxBulkUng = function() {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      const soTien = prompt('Số tiền ứng cước cho mỗi chuyến (PLN/EUR theo chuyến):');
+      if (soTien === null || !soTien.trim()) return;
+      const ngay = prompt('Ngày phiếu chi (YYYY-MM-DD), để trống = hôm nay:', new Date().toISOString().slice(0, 10));
+      if (ngay === null) return;
+      cxBulkPost('ung', { soTien: Number(soTien), ngay: ngay || undefined, hinhThuc: 'TM' });
+    };
+
+    window.cxBulkDelete = function() {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      if (!confirm('Xóa ' + ids.length + ' chuyến? Chuyến còn phiếu hàng sẽ bị bỏ qua.')) return;
+      cxBulkPost('delete');
+    };
     </script>
   `;
   return c.html(layout('Chuy\u1ebfn xe', content, user, 'chuyen-xe'));
 });
 
-// ===================== GET /create — Create / Edit form =============
+// ===================== GET /create - Create / Edit form =============
 chuyenXeRoutes.get('/create', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -315,7 +432,7 @@ chuyenXeRoutes.get('/create', async (c) => {
     </div>
 
     <div class="bg-white rounded-lg shadow p-6 max-w-3xl">
-      <h2 class="text-lg font-semibold mb-4">${isEdit ? '\u270f S\u1eeda chuy\u1ebfn ' + esc(ch!.id) : '+ Chuy\u1ebfn m\u1edbi'}</h2>
+      <h2 class="text-lg font-semibold mb-4">${isEdit ? 'S\u1eeda chuy\u1ebfn ' + esc(ch!.id) : '+ Chuy\u1ebfn m\u1edbi'}</h2>
 
       <form id="chForm" class="space-y-4">
         ${isEdit ? `<input type="hidden" name="id" value="${esc(ch!.id)}">` : ''}
@@ -433,7 +550,7 @@ chuyenXeRoutes.get('/create', async (c) => {
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(form);
-      const body: Record<string, unknown> = {};
+      const body = {};
       fd.forEach((v, k) => { body[k] = v; });
       body.gia_chuyen = Number(body.gia_chuyen) || 0;
       body.da_thanh_toan = body.da_thanh_toan ? 1 : 0;
@@ -467,7 +584,172 @@ chuyenXeRoutes.get('/create', async (c) => {
   return c.html(layout(isEdit ? 'S\u1eeda chuy\u1ebfn' : 'T\u1ea1o chuy\u1ebfn', content, user, 'chuyen-xe'));
 });
 
-// ===================== GET /:id — Detail ============================
+// ===================== POST /api/chuyen-xe - Create / Update ========
+chuyenXeRoutes.post('/api/chuyen-xe', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json();
+
+  const id = body.id as string | undefined;
+  const tuyenId = body.tuyen_id as string;
+  const xeId = body.xe_id as string;
+  const ngayDi = body.ngay_di as string;
+  const ngayDen = (body.ngay_den as string) || null;
+  const giaChuyen = Number(body.gia_chuyen) || 0;
+  const tienTe = (body.tien_te as string) || 'PLN';
+  const trangThai = (body.trang_thai as string) || 'planned';
+  const soSentVaGT = (body.so_sent_va_gt as string) || '';
+  const taiXeId = (body.tai_xe_id as string) || null;
+  const ghiChu = (body.ghi_chu as string) || '';
+  const daThanhToan = body.da_thanh_toan ? 1 : 0;
+
+  if (id) {
+    const existing = await db.prepare('SELECT da_thanh_toan, ngay_thanh_toan FROM chuyen_xe WHERE id = ?').bind(id).first<{ da_thanh_toan: number; ngay_thanh_toan: string }>();
+    const ngayTT = daThanhToan && (!existing || !existing.da_thanh_toan) ? todayStr() : (existing?.ngay_thanh_toan || '');
+
+    await db.prepare(
+      `UPDATE chuyen_xe SET tuyen_id=?, xe_id=?, tai_xe_id=?, ngay_di=?, ngay_den=?,
+        trang_thai=?, gia_chuyen=?, tien_te=?, da_thanh_toan=?, ngay_thanh_toan=?,
+        so_sent_va_gt=?, ghi_chu=?, updated_at=datetime('now') WHERE id=?`
+    ).bind(tuyenId, xeId, taiXeId, ngayDi, ngayDen, trangThai, giaChuyen, tienTe, daThanhToan, ngayTT, soSentVaGT, ghiChu, id).run();
+    return c.json({ success: true, id });
+  }
+
+  let newId: string;
+  const customId = (body.custom_id as string)?.trim();
+  if (customId) {
+    const exists = await db.prepare('SELECT id FROM chuyen_xe WHERE id = ?').bind(customId).first();
+    if (exists) return c.json({ error: 'M\u00e3 chuy\u1ebfn \u0111\u00e3 t\u1ed3n t\u1ea1i' }, 400);
+    newId = customId;
+  } else {
+    if (!tuyenId || !xeId || !ngayDi) {
+      return c.json({ error: 'Thi\u1ebfu th\u00f4ng tin \u0111\u1ec3 t\u1ef1 sinh m\u00e3 chuy\u1ebfn (c\u1ea7n tuy\u1ebfn, xe, ng\u00e0y \u0111i)' }, 400);
+    }
+    newId = await genMaChuyen(db, tuyenId, ngayDi, xeId);
+  }
+
+  await db.prepare(
+    `INSERT INTO chuyen_xe (id, tuyen_id, xe_id, tai_xe_id, ngay_di, ngay_den, trang_thai,
+       gia_chuyen, tien_te, da_thanh_toan, ngay_thanh_toan, so_sent_va_gt, ghi_chu)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(newId, tuyenId, xeId, taiXeId, ngayDi, ngayDen, trangThai, giaChuyen, tienTe, 0, '', soSentVaGT, ghiChu).run();
+
+  return c.json({ success: true, id: newId }, 201);
+});
+
+// ===================== POST /api/chuyen-xe/:id/delete ================
+chuyenXeRoutes.post('/api/chuyen-xe/:id/delete', async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+  const cnt = await db.prepare('SELECT COUNT(*) AS n FROM lo_hang WHERE chuyen_xe_id=?').bind(id).first<{ n: number }>();
+  if ((cnt?.n || 0) > 0) {
+    return c.json({ error: 'Kh\u00f4ng th\u1ec3 x\u00f3a chuy\u1ebfn c\u00f2n phi\u1ebfu h\u00e0ng. G\u1ee1 phi\u1ebfu kh\u1ecfi chuy\u1ebfn tr\u01b0\u1edbc.' }, 400);
+  }
+  const ch = await db.prepare('SELECT id FROM chuyen_xe WHERE id = ?').bind(id).first();
+  if (!ch) return c.json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y chuy\u1ebfn' }, 404);
+  await db.prepare('DELETE FROM chuyen_xe WHERE id = ?').bind(id).run();
+  return c.json({ success: true });
+});
+
+// ===================== POST /api/chuyen-xe/:id/toggle-thanh-toan =====
+chuyenXeRoutes.post('/api/chuyen-xe/:id/toggle-thanh-toan', async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+
+  const ch = await db.prepare('SELECT da_thanh_toan FROM chuyen_xe WHERE id = ?').bind(id).first<{ da_thanh_toan: number }>();
+  if (!ch) return c.json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y chuy\u1ebfn' }, 404);
+
+  const newVal = ch.da_thanh_toan ? 0 : 1;
+  const ngayTT = newVal ? todayStr() : '';
+
+  await db.prepare(
+    'UPDATE chuyen_xe SET da_thanh_toan = ?, ngay_thanh_toan = ?, updated_at = datetime(\'now\') WHERE id = ?'
+  ).bind(newVal, ngayTT, id).run();
+
+  return c.json({ success: true, da_thanh_toan: newVal });
+});
+
+// ===================== POST /api/chuyen-xe/bulk =====================
+chuyenXeRoutes.post('/api/chuyen-xe/bulk', async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json<{
+    action: string;
+    ids: string[];
+    ngay?: string;
+    soTien?: number;
+    hinhThuc?: 'TM' | 'CK';
+  }>();
+  const ids = body.ids || [];
+  if (ids.length === 0) return c.json({ error: 'Chưa chọn chuyến' }, 400);
+
+  const audit = async (hanhDong: string, chiTiet: string) => {
+    await db.prepare(
+      `INSERT INTO audit_log (id, ngay, gio, nguoi, nguoi_label, hanh_dong, target, chi_tiet)
+       VALUES (?, date('now'), strftime('%H:%M','now'), ?, ?, ?, 'bulk', ?)`
+    ).bind(`AL-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, user.role, user.display_name, hanhDong, chiTiet).run();
+  };
+
+  if (body.action === 'da-ve') {
+    const ngayVe = body.ngay || todayStr();
+    for (const id of ids) {
+      await db.prepare(
+        "UPDATE chuyen_xe SET ngay_den=?, trang_thai='hoan_thanh', updated_at=datetime('now') WHERE id=?"
+      ).bind(ngayVe, id).run();
+    }
+    await audit('Bulk đã về', `${ids.length} chuyến, ngày về ${ngayVe}`);
+    return c.json({ success: true, count: ids.length });
+  }
+
+  if (body.action === 'delete') {
+    let deleted = 0;
+    for (const id of ids) {
+      const cnt = await db.prepare('SELECT COUNT(*) AS n FROM lo_hang WHERE chuyen_xe_id=?').bind(id).first<{ n: number }>();
+      if ((cnt?.n || 0) > 0) continue;
+      await db.prepare('DELETE FROM chuyen_xe WHERE id=?').bind(id).run();
+      deleted++;
+    }
+    await audit('Bulk xoá chuyến', `${deleted}/${ids.length} chuyến (bỏ qua chuyến còn phiếu)`);
+    return c.json({ success: true, count: deleted, skipped: ids.length - deleted });
+  }
+
+  if (body.action === 'thanh-toan' || body.action === 'ung') {
+    const ngay = body.ngay || todayStr();
+    const hinhThuc = body.hinhThuc || 'TM';
+    const kieu = body.action === 'ung' ? 'ung' : 'trahet';
+    let created = 0;
+    for (const id of ids) {
+      const ch = await db.prepare(
+        `SELECT cx.id, cx.gia_chuyen, cx.tien_te, cx.da_thanh_toan, cvt.ten AS cty_ten
+         FROM chuyen_xe cx LEFT JOIN xe x ON cx.xe_id=x.id LEFT JOIN cty_van_tai cvt ON x.cty_vt_id=cvt.id
+         WHERE cx.id=?`
+      ).bind(id).first<{ id: string; gia_chuyen: number; tien_te: string; da_thanh_toan: number; cty_ten: string }>();
+      if (!ch) continue;
+      const soTien = body.action === 'ung' ? (Number(body.soTien) || 0) : Number(ch.gia_chuyen) || 0;
+      if (soTien <= 0) continue;
+      const pid = `PC-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+      await db.prepare(
+        `INSERT INTO phieu_chi (id, ngay, dau_muc, so_tien, tien_te, hinh_thuc, ghi_chu, nguoi_nhap, chuyen_xe_id, kieu_qt, gio)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%H:%M','now'))`
+      ).bind(
+        pid, ngay, `Cước vận tải${ch.cty_ten ? ' - ' + ch.cty_ten : ''}`, soTien, ch.tien_te || 'PLN', hinhThuc,
+        body.action === 'ung' ? `Ứng cước chuyến ${id}` : `Thanh toán cước chuyến ${id}`,
+        user.display_name, id, kieu,
+      ).run();
+      if (body.action === 'thanh-toan') {
+        await db.prepare(
+          "UPDATE chuyen_xe SET da_thanh_toan=1, ngay_thanh_toan=?, updated_at=datetime('now') WHERE id=?"
+        ).bind(ngay, id).run();
+      }
+      created++;
+    }
+    await audit(body.action === 'ung' ? 'Bulk ứng cước' : 'Bulk thanh toán cước', `${created} phiếu chi, ngày ${ngay}`);
+    return c.json({ success: true, count: created, ngay });
+  }
+
+  return c.json({ error: 'Unknown action' }, 400);
+});
+
+// ===================== GET /:id - Detail ============================
 chuyenXeRoutes.get('/:id', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -518,7 +800,7 @@ chuyenXeRoutes.get('/:id', async (c) => {
       <td class="px-3 py-2.5 text-sm text-right">${l.so_kien}</td>
       <td class="px-3 py-2.5 text-sm text-right ${l.da_tra_hang === l.so_kien ? 'text-green-600' : 'text-amber-600'}">${l.da_tra_hang}</td>
       <td class="px-3 py-2.5 text-sm text-right">${fmtNum(tienVT)} ${l.tien_te}</td>
-      <td class="px-3 py-2.5 text-sm text-right">${l.so_tien_hang > 0 ? fmtNum(l.so_tien_hang) + ' ' + (l.tien_te_th || l.tien_te) : '\u2014'}</td>
+      <td class="px-3 py-2.5 text-sm text-right">${l.so_tien_hang > 0 ? fmtNum(l.so_tien_hang) + ' ' + (l.tien_te_th || l.tien_te) : '-'}</td>
     </tr>`;
   }).join('');
 
@@ -555,7 +837,7 @@ chuyenXeRoutes.get('/:id', async (c) => {
           </div>
         </div>
         <div class="flex gap-2">
-          <a href="/chuyen-xe/create?edit=${esc(ch.id)}" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-md text-sm transition-colors">\u270f S\u1eeda</a>
+          <a href="/chuyen-xe/create?edit=${esc(ch.id)}" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-md text-sm transition-colors">Sửa</a>
         </div>
       </div>
     </div>
@@ -611,13 +893,13 @@ chuyenXeRoutes.get('/:id', async (c) => {
         <div><span class="text-gray-500">M\u00e3 chuy\u1ebfn:</span> <strong>${esc(ch.id)}</strong></div>
         <div><span class="text-gray-500">Tuy\u1ebfn:</span> <strong>${esc(ch.tuyen_ten)}</strong></div>
         <div><span class="text-gray-500">Xe:</span> ${esc(ch.so_xe)} (${esc(ch.bien_so)})</div>
-        <div><span class="text-gray-500">T\u00e0i x\u1ebf:</span> ${esc(ch.tai_xe_ten) || '\u2014'}</div>
+        <div><span class="text-gray-500">T\u00e0i x\u1ebf:</span> ${esc(ch.tai_xe_ten) || '-'}</div>
         <div><span class="text-gray-500">Ng\u00e0y \u0111i:</span> ${fmtDate(ch.ngay_di)}</div>
         <div><span class="text-gray-500">Ng\u00e0y v\u1ec1:</span> ${fmtDate(ch.ngay_den)}</div>
         <div><span class="text-gray-500">Gi\u00e1 chuy\u1ebfn:</span> <strong>${fmtNum(ch.gia_chuyen)} ${ch.tien_te}</strong></div>
         <div><span class="text-gray-500">Tr\u1ea1ng th\u00e1i:</span> ${TT_LABEL[ch.trang_thai] || ch.trang_thai}</div>
-        <div><span class="text-gray-500">SENT/GT:</span> ${esc(ch.so_sent_va_gt) || '\u2014'}</div>
-        <div><span class="text-gray-500">Ghi ch\u00fa:</span> ${esc(ch.ghi_chu) || '\u2014'}</div>
+        <div><span class="text-gray-500">SENT/GT:</span> ${esc(ch.so_sent_va_gt) || '-'}</div>
+        <div><span class="text-gray-500">Ghi ch\u00fa:</span> ${esc(ch.ghi_chu) || '-'}</div>
       </div>
     </div>
 
@@ -630,166 +912,4 @@ chuyenXeRoutes.get('/:id', async (c) => {
     </script>
   `;
   return c.html(layout('Chuy\u1ebfn ' + id, content, user, 'chuyen-xe'));
-});
-
-// ===================== POST /api/chuyen-xe — Create / Update ========
-chuyenXeRoutes.post('/api/chuyen-xe', async (c) => {
-  const db = c.env.DB;
-  const body = await c.req.json();
-
-  const id = body.id as string | undefined;
-  const tuyenId = body.tuyen_id as string;
-  const xeId = body.xe_id as string;
-  const ngayDi = body.ngay_di as string;
-  const ngayDen = (body.ngay_den as string) || null;
-  const giaChuyen = Number(body.gia_chuyen) || 0;
-  const tienTe = (body.tien_te as string) || 'PLN';
-  const trangThai = (body.trang_thai as string) || 'planned';
-  const soSentVaGT = (body.so_sent_va_gt as string) || '';
-  const taiXeId = (body.tai_xe_id as string) || null;
-  const ghiChu = (body.ghi_chu as string) || '';
-  const daThanhToan = body.da_thanh_toan ? 1 : 0;
-
-  if (id) {
-    const existing = await db.prepare('SELECT da_thanh_toan, ngay_thanh_toan FROM chuyen_xe WHERE id = ?').bind(id).first<{ da_thanh_toan: number; ngay_thanh_toan: string }>();
-    const ngayTT = daThanhToan && (!existing || !existing.da_thanh_toan) ? todayStr() : (existing?.ngay_thanh_toan || '');
-
-    await db.prepare(
-      `UPDATE chuyen_xe SET tuyen_id=?, xe_id=?, tai_xe_id=?, ngay_di=?, ngay_den=?,
-        trang_thai=?, gia_chuyen=?, tien_te=?, da_thanh_toan=?, ngay_thanh_toan=?,
-        so_sent_va_gt=?, ghi_chu=?, updated_at=datetime('now') WHERE id=?`
-    ).bind(tuyenId, xeId, taiXeId, ngayDi, ngayDen, trangThai, giaChuyen, tienTe, daThanhToan, ngayTT, soSentVaGT, ghiChu, id).run();
-    return c.json({ success: true, id });
-  }
-
-  let newId: string;
-  const customId = (body.custom_id as string)?.trim();
-  if (customId) {
-    const exists = await db.prepare('SELECT id FROM chuyen_xe WHERE id = ?').bind(customId).first();
-    if (exists) return c.json({ error: 'M\u00e3 chuy\u1ebfn \u0111\u00e3 t\u1ed3n t\u1ea1i' }, 400);
-    newId = customId;
-  } else {
-    if (!tuyenId || !xeId || !ngayDi) {
-      return c.json({ error: 'Thi\u1ebfu th\u00f4ng tin \u0111\u1ec3 t\u1ef1 sinh m\u00e3 chuy\u1ebfn (c\u1ea7n tuy\u1ebfn, xe, ng\u00e0y \u0111i)' }, 400);
-    }
-    newId = await genMaChuyen(db, tuyenId, ngayDi, xeId);
-  }
-
-  await db.prepare(
-    `INSERT INTO chuyen_xe (id, tuyen_id, xe_id, tai_xe_id, ngay_di, ngay_den, trang_thai,
-       gia_chuyen, tien_te, da_thanh_toan, ngay_thanh_toan, so_sent_va_gt, ghi_chu)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
-  ).bind(newId, tuyenId, xeId, taiXeId, ngayDi, ngayDen, trangThai, giaChuyen, tienTe, 0, '', soSentVaGT, ghiChu).run();
-
-  return c.json({ success: true, id: newId }, 201);
-});
-
-// ===================== POST /api/chuyen-xe/:id/delete ================
-chuyenXeRoutes.post('/api/chuyen-xe/:id/delete', async (c) => {
-  const id = c.req.param('id');
-  await c.env.DB.prepare('DELETE FROM chuyen_xe WHERE id = ?').bind(id).run();
-  return c.json({ success: true });
-});
-
-// ===================== POST /api/chuyen-xe/:id/toggle-thanh-toan =====
-chuyenXeRoutes.post('/api/chuyen-xe/:id/toggle-thanh-toan', async (c) => {
-  const id = c.req.param('id');
-  const db = c.env.DB;
-
-  const ch = await db.prepare('SELECT da_thanh_toan FROM chuyen_xe WHERE id = ?').bind(id).first<{ da_thanh_toan: number }>();
-  if (!ch) return c.json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y chuy\u1ebfn' }, 404);
-
-  const newVal = ch.da_thanh_toan ? 0 : 1;
-  const ngayTT = newVal ? todayStr() : '';
-
-  await db.prepare(
-    'UPDATE chuyen_xe SET da_thanh_toan = ?, ngay_thanh_toan = ?, updated_at = datetime(\'now\') WHERE id = ?'
-  ).bind(newVal, ngayTT, id).run();
-
-  return c.json({ success: true, da_thanh_toan: newVal });
-});
-
-// ===================== POST /api/chuyen-xe/bulk =====================
-// Bulk trips: pay carrier (create expense slip), advance (expense slip kieu ung),
-// mark returned (set return date + complete), delete.
-chuyenXeRoutes.post('/api/chuyen-xe/bulk', async (c) => {
-  const user = c.get('user');
-  const db = c.env.DB;
-  const body = await c.req.json<{
-    action: string;
-    ids: string[];
-    ngay?: string;
-    soTien?: number;
-    hinhThuc?: 'TM' | 'CK';
-  }>();
-  const ids = body.ids || [];
-  if (ids.length === 0) return c.json({ error: 'Chưa chọn chuyến' }, 400);
-
-  const audit = async (hanhDong: string, chiTiet: string) => {
-    await db.prepare(
-      `INSERT INTO audit_log (id, ngay, gio, nguoi, nguoi_label, hanh_dong, target, chi_tiet)
-       VALUES (?, date('now'), strftime('%H:%M','now'), ?, ?, ?, 'bulk', ?)`
-    ).bind(`AL-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, user.role, user.display_name, hanhDong, chiTiet).run();
-  };
-
-  if (body.action === 'da-ve') {
-    const ngayVe = body.ngay || todayStr();
-    for (const id of ids) {
-      await db.prepare(
-        "UPDATE chuyen_xe SET ngay_den=?, trang_thai='hoan_thanh', updated_at=datetime('now') WHERE id=?"
-      ).bind(ngayVe, id).run();
-    }
-    await audit('Bulk đã về', `${ids.length} chuyến, ngày về ${ngayVe}`);
-    return c.json({ success: true, count: ids.length });
-  }
-
-  if (body.action === 'delete') {
-    let deleted = 0;
-    for (const id of ids) {
-      // Only delete if the trip has no remaining receipts (avoid orphans)
-      const cnt = await db.prepare('SELECT COUNT(*) AS n FROM lo_hang WHERE chuyen_xe_id=?').bind(id).first<{ n: number }>();
-      if ((cnt?.n || 0) > 0) continue;
-      await db.prepare('DELETE FROM chuyen_xe WHERE id=?').bind(id).run();
-      deleted++;
-    }
-    await audit('Bulk xoá chuyến', `${deleted}/${ids.length} chuyến (bỏ qua chuyến còn phiếu)`);
-    return c.json({ success: true, count: deleted, skipped: ids.length - deleted });
-  }
-
-  if (body.action === 'thanh-toan' || body.action === 'ung') {
-    const ngay = body.ngay || todayStr();
-    const hinhThuc = body.hinhThuc || 'TM';
-    const kieu = body.action === 'ung' ? 'ung' : 'trahet';
-    let created = 0;
-    for (const id of ids) {
-      const ch = await db.prepare(
-        `SELECT cx.id, cx.gia_chuyen, cx.tien_te, cx.da_thanh_toan, cvt.ten AS cty_ten
-         FROM chuyen_xe cx LEFT JOIN xe x ON cx.xe_id=x.id LEFT JOIN cty_van_tai cvt ON x.cty_vt_id=cvt.id
-         WHERE cx.id=?`
-      ).bind(id).first<{ id: string; gia_chuyen: number; tien_te: string; da_thanh_toan: number; cty_ten: string }>();
-      if (!ch) continue;
-      const soTien = body.action === 'ung' ? (Number(body.soTien) || 0) : Number(ch.gia_chuyen) || 0;
-      if (soTien <= 0) continue;
-      const pid = `PC-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
-      await db.prepare(
-        `INSERT INTO phieu_chi (id, ngay, dau_muc, so_tien, tien_te, hinh_thuc, ghi_chu, nguoi_nhap, chuyen_xe_id, kieu_qt, gio)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%H:%M','now'))`
-      ).bind(
-        pid, ngay, `Cước vận tải${ch.cty_ten ? ' - ' + ch.cty_ten : ''}`, soTien, ch.tien_te || 'PLN', hinhThuc,
-        body.action === 'ung' ? `Ứng cước chuyến ${id}` : `Thanh toán cước chuyến ${id}`,
-        user.display_name, id, kieu,
-      ).run();
-      // When fully paid, set the paid flag on the trip
-      if (body.action === 'thanh-toan') {
-        await db.prepare(
-          "UPDATE chuyen_xe SET da_thanh_toan=1, ngay_thanh_toan=?, updated_at=datetime('now') WHERE id=?"
-        ).bind(ngay, id).run();
-      }
-      created++;
-    }
-    await audit(body.action === 'ung' ? 'Bulk ứng cước' : 'Bulk thanh toán cước', `${created} phiếu chi, ngày ${ngay}`);
-    return c.json({ success: true, count: created, ngay });
-  }
-
-  return c.json({ error: 'Unknown action' }, 400);
 });

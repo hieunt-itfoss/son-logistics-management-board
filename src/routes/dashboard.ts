@@ -63,7 +63,7 @@ dashboardRoutes.get('/', async (c) => {
 
       <div class="htql-dash-grid-main-side">
         <div>
-          ${panelCard({ title: 'Thu vs Chi — 6 tháng', body: '<div id="chart-thu-chi-month"></div>' })}
+          ${panelCard({ title: 'Thu vs Chi - 6 tháng', body: '<div id="chart-thu-chi-month"></div>' })}
         </div>
         <div>
           ${panelCard({ title: 'Chuyến theo trạng thái', body: '<div id="chart-trip-status"></div>' })}
@@ -79,7 +79,7 @@ dashboardRoutes.get('/', async (c) => {
 
       <div class="htql-dash-grid-main-side">
         <div>
-          ${panelCard({ title: 'Dòng tiền — 30 ngày', body: '<div id="chart-revenue-expenses"></div>' })}
+          ${panelCard({ title: 'Dòng tiền - 30 ngày', body: '<div id="chart-revenue-expenses"></div>' })}
         </div>
         <div>
           ${panelCard({ title: 'Top khách nợ', body: '<div id="chart-top-debtors"></div>' })}

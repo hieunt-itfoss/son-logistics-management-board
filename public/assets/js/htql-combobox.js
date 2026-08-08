@@ -1,5 +1,5 @@
 /**
- * Searchable combobox — type in the text field, pick from filtered dropdown.
+ * Searchable combobox - type in the text field, pick from filtered dropdown.
  * Markup from searchSelect() in src/utils/ui.ts
  */
 (function () {

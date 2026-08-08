@@ -30,7 +30,7 @@ const LABEL_AMBER = 'text-xs font-semibold text-amber-700 dark:text-amber-400';
 const LABEL_PRIMARY = 'text-xs font-semibold text-primary';
 const LABEL_MUTED = 'text-[10px] font-medium text-bodytext dark:text-darklink';
 
-/** VT đầu mục only — used on phiếu thu khoản rows (reference: first 5) */
+/** VT đầu mục only - used on phiếu thu khoản rows (reference: first 5) */
 const PT_DAU_MUC = DAU_MUC_THU_CHI.slice(0, 5);
 const VT_DAUMUCS = ['Vận tải Pháp','Vận tải Ý','Vận tải Tiệp','Vận tải Balan','Vận tải khác'];
 const KHAC_DAUMUCS = ['Văn phòng','Chi ngoài'];
@@ -81,14 +81,14 @@ function appendNhanToGhiChu(ghiChu: string, nhanTen: string): string {
 }
 
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return '—';
+  if (!d) return '-';
   const parts = d.split('-');
   if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
   return d;
 }
 
 /* ══════════════════════════════════════════════════════════════
-   GET / — Main Thu/Chi view (with profit, warnings, chốt sổ)
+   GET / - Main Thu/Chi view (with profit, warnings, chốt sổ)
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.get('/', async (c) => {
   const user = c.get('user');
@@ -191,7 +191,7 @@ thuChiRoutes.get('/', async (c) => {
   if (loai === 'all' || loai === 'thu') {
     for (const r of thuList as R[]) {
       const loIds: string[] = r.lo_ids ? JSON.parse(String(r.lo_ids)) : [];
-      const khTen = String(r.khach_hang_ten || '—');
+      const khTen = String(r.khach_hang_ten || '-');
       const loStr = loIds.length
         ? loIds.map(l => `<span class="text-primary font-mono text-xs">${esc(l)}</span>`).join(', ')
         : '';
@@ -217,7 +217,7 @@ thuChiRoutes.get('/', async (c) => {
     for (const r of chiList as R[]) {
       const phaiTV = Number(r.phai_thu_ve) ? badge('Cần thu', 'warning') : '';
       const cxId = String(r.chuyen_xe_id || '');
-      const related = cxId ? `<a href="/chuyen-xe/${esc(cxId)}" class="text-primary hover:underline font-mono text-xs">${esc(cxId)}</a>` : '—';
+      const related = cxId ? `<a href="/chuyen-xe/${esc(cxId)}" class="text-primary hover:underline font-mono text-xs">${esc(cxId)}</a>` : '-';
       allRows.push(tableRow([
         badge('Chi', 'error'),
         `<span class="font-mono text-bodytext text-xs">${esc(String(r.id))}</span>`,
@@ -418,12 +418,12 @@ thuChiRoutes.get('/', async (c) => {
 
     const warnRows = warnList.slice(0, 20).map((p) => {
       const days = Math.floor((todayDate.getTime() - new Date(String(p.ngay)).getTime()) / 86400000);
-      const rel = String(p.chuyen_xe_id || '') || '—';
+      const rel = String(p.chuyen_xe_id || '') || '-';
       return tableRow([
         `<strong class="font-mono text-xs">${esc(String(p.id))}</strong>`,
         `${esc(String(p.ngay))} <span class="text-error text-xs">(${days}d)</span>`,
         esc(String(p.dau_muc || '')),
-        rel !== '—' ? `<a href="/chuyen-xe/${esc(rel)}" class="text-primary hover:underline font-mono text-xs">${esc(rel)}</a>` : '—',
+        rel !== '-' ? `<a href="/chuyen-xe/${esc(rel)}" class="text-primary hover:underline font-mono text-xs">${esc(rel)}</a>` : '-',
         `<strong class="text-error">${fmtNum(Number(p.so_tien) || 0)} ${p.tien_te}</strong>`,
         `<span class="text-xs">${esc(String(p.ghi_chu || ''))}</span>`,
       ]);
@@ -542,7 +542,7 @@ thuChiRoutes.get('/', async (c) => {
     <h3 class="text-base font-semibold text-dark dark:text-white mb-3 flex items-center gap-2">
       <iconify-icon icon="solar:document-text-linear" class="text-primary"></iconify-icon>
       Chi tiết phiếu Thu / Chi
-      <span class="text-xs text-bodytext font-normal">Bộ lọc riêng — KHÔNG ảnh hưởng số liệu chốt sổ</span>
+      <span class="text-xs text-bodytext font-normal">Bộ lọc riêng - KHÔNG ảnh hưởng số liệu chốt sổ</span>
     </h3>
 
     ${card({
@@ -605,7 +605,7 @@ thuChiRoutes.get('/', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   GET /thu/create — Phiếu thu form
+   GET /thu/create - Phiếu thu form
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.get('/thu/create', async (c) => {
   if (!c.get('perms').canEdit) return c.redirect('/thu-chi?denied=edit');
@@ -614,7 +614,7 @@ thuChiRoutes.get('/thu/create', async (c) => {
   const { results: khachList } = await c.env.DB.prepare('SELECT id, ma_kh, ten FROM khach_hang ORDER BY ten').all();
   const khSearchOpts = (khachList as Record<string, unknown>[]).map((kh) => ({
     value: String(kh.id),
-    label: `${String(kh.ma_kh)} — ${String(kh.ten)}`,
+    label: `${String(kh.ma_kh)} - ${String(kh.ten)}`,
   }));
 
   const today = new Date().toISOString().slice(0, 10);
@@ -703,7 +703,7 @@ thuChiRoutes.get('/thu/create', async (c) => {
             + '</div>'
             + '<div class="mb-2"><label class="block ' + ${JSON.stringify(LABEL_MUTED)} + ' mb-1">Phiếu liên quan (chọn nhiều)</label>'
             + '<div data-pt-lo-box="' + idx + '" class="htql-lo-multi' + (loDisabled ? ' opacity-60 pointer-events-none' : '') + '" role="group" aria-label="Phiếu liên quan"></div>'
-            + '<p class="text-[10px] text-bodytext mt-0.5" data-pt-lo-hint="' + idx + '">' + (loDisabled ? '— Phiếu ứng (không gán) —' : 'Tick nhiều phiếu liên quan khoản này') + '</p>'
+            + '<p class="text-[10px] text-bodytext mt-0.5" data-pt-lo-hint="' + idx + '">' + (loDisabled ? '- Phiếu ứng (không gán) -' : 'Tick nhiều phiếu liên quan khoản này') + '</p>'
             + '<div class="grid grid-cols-1 sm:grid-cols-[1.3fr_0.8fr_0.8fr_auto] gap-2 items-end">'
             + '<div><label class="block ' + ${JSON.stringify(LABEL_MUTED)} + ' mb-1">Số tiền</label>'
             + '<input type="number" data-pt-st="' + idx + '" value="' + (r.so_tien || '') + '" step="0.01" min="0" required class="' + FC + ' text-right font-semibold"></div>'
@@ -755,7 +755,7 @@ thuChiRoutes.get('/thu/create', async (c) => {
         var r = ptRows[idx];
         if (!hint || !r) return;
         if (r.kieu_qt === 'ung') {
-          hint.textContent = '— Phiếu ứng (không gán) —';
+          hint.textContent = '- Phiếu ứng (không gán) -';
           return;
         }
         var n = (r.lo_ids || []).length;
@@ -767,7 +767,7 @@ thuChiRoutes.get('/thu/create', async (c) => {
         var box = document.querySelector('[data-pt-lo-box="' + idx + '"]');
         if (!box || !r) return;
         if (r.kieu_qt === 'ung') {
-          box.innerHTML = '<span class="text-xs text-bodytext px-1 py-1 block">— Phiếu ứng (không gán) —</span>';
+          box.innerHTML = '<span class="text-xs text-bodytext px-1 py-1 block">- Phiếu ứng (không gán) -</span>';
           box.classList.add('opacity-60', 'pointer-events-none');
           r.lo_ids = [];
           updateLoHint(idx);
@@ -901,7 +901,7 @@ thuChiRoutes.get('/thu/create', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   GET /chi/create — Phiếu chi form
+   GET /chi/create - Phiếu chi form
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.get('/chi/create', async (c) => {
   if (!c.get('perms').canEdit) return c.redirect('/thu-chi?denied=edit');
@@ -914,8 +914,8 @@ thuChiRoutes.get('/chi/create', async (c) => {
      LEFT JOIN xe x ON cx.xe_id = x.id
      ORDER BY cx.ngay_di DESC LIMIT 100`
   ).all();
-  const chOpts = `<option value="">— Không —</option>` + (chuyenList as Record<string, unknown>[]).map(cx =>
-    `<option value="${cx.id}">${esc(String(cx.id))} (${esc(String(cx.so_xe || '?'))} — ${esc(String(cx.tuyen_ten || '?'))})</option>`
+  const chOpts = `<option value="">- Không -</option>` + (chuyenList as Record<string, unknown>[]).map(cx =>
+    `<option value="${cx.id}">${esc(String(cx.id))} (${esc(String(cx.so_xe || '?'))} - ${esc(String(cx.tuyen_ten || '?'))})</option>`
   ).join('');
 
   const { results: khachList } = await c.env.DB.prepare('SELECT id, ma_kh, ten FROM khach_hang ORDER BY ten').all();
@@ -949,7 +949,7 @@ thuChiRoutes.get('/chi/create', async (c) => {
 
         <!-- Row 3: recipient + trip -->
         <div class="grid grid-cols-1 sm:grid-cols-[1.5fr_1fr] gap-3 p-3 rounded-lg border border-primary/30 bg-lightprimary dark:bg-primary/10">
-          ${formField('👤 Người nhận tiền', select({ name: 'nguoi_nhan', id: 'pc_nhan', class: 'border-primary/40', options: `<option value="">— Chọn —</option>${nhOpts}` }), { labelClass: LABEL_PRIMARY })}
+          ${formField('👤 Người nhận tiền', select({ name: 'nguoi_nhan', id: 'pc_nhan', class: 'border-primary/40', options: `<option value="">- Chọn -</option>${nhOpts}` }), { labelClass: LABEL_PRIMARY })}
           ${formField('🚛 Chuyến (nếu chi VT)', select({ name: 'chuyen_xe_id', id: 'pc_chuyen', options: chOpts }), { labelClass: LABEL_PRIMARY })}
         </div>
 
@@ -1084,7 +1084,7 @@ thuChiRoutes.get('/chi/create', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   GET /thu/print/:id — Print phiếu thu (A5)
+   GET /thu/print/:id - Print phiếu thu (A5)
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.get('/thu/print/:id', async (c) => {
   const id = c.req.param('id');
@@ -1105,7 +1105,7 @@ thuChiRoutes.get('/thu/print/:id', async (c) => {
        WHERE lh.id IN (${placeholders})`
     ).bind(...loIds).all();
     const lotRows = (lots as Record<string,unknown>[]).map(l =>
-      `<tr><td>${esc(String(l.id))}</td><td>${l.ngay_di || '—'}</td><td>${esc(String(l.tuyen_ten || '—'))}</td><td style="text-align:right">${fmtNum((Number(l.don_gia)||0) * (Number(l.so_kien)||0))} ${pt.tien_te || 'PLN'}</td></tr>`
+      `<tr><td>${esc(String(l.id))}</td><td>${l.ngay_di || '-'}</td><td>${esc(String(l.tuyen_ten || '-'))}</td><td style="text-align:right">${fmtNum((Number(l.don_gia)||0) * (Number(l.so_kien)||0))} ${pt.tien_te || 'PLN'}</td></tr>`
     ).join('');
     lotsHtml = `<div style="margin:8px 0"><b>Phiếu liên quan:</b></div>
       <table><tr><th>Mã phiếu</th><th>Ngày</th><th>Tuyến</th><th>Số tiền</th></tr>${lotRows}</table>`;
@@ -1144,7 +1144,7 @@ table th{background:#f0f0f0}
 </div>
 <h1>PHIẾU THU TIỀN</h1>
 <div style="text-align:right">Số: <b>${esc(String(pt.id))}</b> &nbsp;&nbsp; Ngày: <b>${pt.ngay} ${pt.gio || ''}</b></div>
-<div class="info"><b>Khách hàng:</b> ${kh ? esc(String(kh.ten)) + ' (' + esc(String(kh.ma_kh)) + ')' : '—'}</div>
+<div class="info"><b>Khách hàng:</b> ${kh ? esc(String(kh.ten)) + ' (' + esc(String(kh.ma_kh)) + ')' : '-'}</div>
 <div class="info"><b>Đầu mục:</b> ${esc(String(pt.dau_muc || ''))}</div>
 <div class="info"><b>Loại tiền:</b> ${String(pt.loai_tien) === 'tienhang' ? 'Tiền hàng' : 'Tiền vận tải'}</div>
 <div class="info"><b>Hình thức:</b> ${String(pt.hinh_thuc) === 'TM' ? 'Tiền mặt' : 'Chuyển khoản'}</div>
@@ -1163,7 +1163,7 @@ ${pt.ghi_chu ? `<div class="info"><b>Ghi chú:</b> ${esc(String(pt.ghi_chu))}</d
 });
 
 /* ══════════════════════════════════════════════════════════════
-   GET /chi/print/:id — Print phiếu chi (A5)
+   GET /chi/print/:id - Print phiếu chi (A5)
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.get('/chi/print/:id', async (c) => {
   const id = c.req.param('id');
@@ -1216,7 +1216,7 @@ ${pc.ghi_chu ? `<div class="info"><b>Ghi chú:</b> ${esc(String(pc.ghi_chu))}</d
 });
 
 /* ══════════════════════════════════════════════════════════════
-   GET /doi-soat/:khachId — Đối soát công nợ (enhanced)
+   GET /doi-soat/:khachId - Đối soát công nợ (enhanced)
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.get('/doi-soat/:khachId', async (c) => {
   const user = c.get('user');
@@ -1260,10 +1260,10 @@ thuChiRoutes.get('/doi-soat/:khachId', async (c) => {
 
   for (const l of loList as R[]) {
     const ngayDi = String(l.ngay_di || '');
-    const tuyen = String(l.tuyen_ten || '—');
+    const tuyen = String(l.tuyen_ten || '-');
     const dmGroup = String(l.dau_muc_group || 'khac');
     const dauMuc = dmLabel[dmGroup] || 'Vận tải khác';
-    const nguoiGui = String(l.hang_ten || '—');
+    const nguoiGui = String(l.hang_ten || '-');
     const soKien = Number(l.so_kien) || 0;
     const vtTienTe = String(l.tien_te || 'PLN');
     const vtAmount = (Number(l.thanh_tien) || 0) - (Number(l.giam_gia) || 0);
@@ -1331,12 +1331,12 @@ thuChiRoutes.get('/doi-soat/:khachId', async (c) => {
       <td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-right">${r.soKien}</td>
       <td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-right bg-lightprimary dark:bg-primary/10 font-semibold">${fmtNum(r.vtAmount)}</td>
       <td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-center bg-lightprimary dark:bg-primary/10">${r.vtTienTe}</td>
-      <td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-right bg-lightwarning dark:bg-warning/10">${r.thAmount > 0 ? '<strong>' + fmtNum(r.thAmount) + '</strong>' : '—'}</td>
-      <td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-center bg-lightwarning dark:bg-warning/10">${r.thAmount > 0 ? r.thTienTe : '—'}</td>
+      <td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-right bg-lightwarning dark:bg-warning/10">${r.thAmount > 0 ? '<strong>' + fmtNum(r.thAmount) + '</strong>' : '-'}</td>
+      <td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-center bg-lightwarning dark:bg-warning/10">${r.thAmount > 0 ? r.thTienTe : '-'}</td>
     </tr>`).join('');
 
     const vtTotRows = Object.entries(totByVTCcy).sort().map(([tte, v]) =>
-      `<tr class="bg-lightgray dark:bg-darkgray font-bold"><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs" colspan="3">TỔNG VT ${tte}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-right">${fmtNum(totKien)}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-right bg-lightprimary dark:bg-primary/10">${fmtNum(v)}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-center bg-lightprimary dark:bg-primary/10">${tte}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs">—</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs">—</td></tr>`
+      `<tr class="bg-lightgray dark:bg-darkgray font-bold"><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs" colspan="3">TỔNG VT ${tte}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-right">${fmtNum(totKien)}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-right bg-lightprimary dark:bg-primary/10">${fmtNum(v)}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-center bg-lightprimary dark:bg-primary/10">${tte}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs">-</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs">-</td></tr>`
     ).join('');
     const thTotRows = Object.entries(totByTHCcy).sort().map(([tte, v]) =>
       `<tr class="bg-lightwarning dark:bg-warning/10 font-bold"><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs" colspan="6">TỔNG TIỀN HÀNG ${tte}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-right">${fmtNum(v)}</td><td class="border border-bordergray dark:border-darkborder px-2 py-1 text-xs text-center">${tte}</td></tr>`
@@ -1344,7 +1344,7 @@ thuChiRoutes.get('/doi-soat/:khachId', async (c) => {
 
     phieuHTML = `
       <div class="mb-4">
-        <div class="bg-primary text-white px-3 py-1.5 text-sm font-bold rounded-t-lg">Phiếu hàng — chi tiết theo mệnh giá riêng</div>
+        <div class="bg-primary text-white px-3 py-1.5 text-sm font-bold rounded-t-lg">Phiếu hàng - chi tiết theo mệnh giá riêng</div>
         <table class="w-full border-collapse text-xs">
           <thead><tr class="bg-lightgray dark:bg-darkgray">
             <th class="border border-bordergray dark:border-darkborder px-2 py-1 text-left">Ngày</th>
@@ -1421,7 +1421,7 @@ thuChiRoutes.get('/doi-soat/:khachId', async (c) => {
 
     <div class="flex items-center gap-3 mb-4 no-print">
       <a href="/thu-chi" class="text-bodytext hover:text-dark dark:hover:text-white"><iconify-icon icon="solar:arrow-left-linear" class="text-xl"></iconify-icon></a>
-      <h2 class="text-xl font-semibold text-dark dark:text-white">Đối soát công nợ — ${esc(khTen)}</h2>
+      <h2 class="text-xl font-semibold text-dark dark:text-white">Đối soát công nợ - ${esc(khTen)}</h2>
     </div>
 
     <div class="flex flex-wrap gap-2 mb-4 no-print">
@@ -1469,7 +1469,7 @@ thuChiRoutes.get('/doi-soat/:khachId', async (c) => {
     </script>
   `;
 
-  return c.html(layout(`Đối soát — ${khTen}`, content, user, 'thu-chi'));
+  return c.html(layout(`Đối soát - ${khTen}`, content, user, 'thu-chi'));
 });
 
 /* ══════════════════════════════════════════════════════════════
@@ -1497,7 +1497,7 @@ thuChiRoutes.get('/api/lo-hang-by-kh', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   POST /api/phieu-thu — Create phieu thu
+   POST /api/phieu-thu - Create phieu thu
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.post('/api/phieu-thu', async (c) => {
   const denied = denyUnlessCanEdit(c);
@@ -1583,7 +1583,7 @@ thuChiRoutes.post('/api/phieu-thu', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   POST /api/phieu-chi — Create phieu chi
+   POST /api/phieu-chi - Create phieu chi
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.post('/api/phieu-chi', async (c) => {
   const denied = denyUnlessCanEdit(c);
@@ -1662,7 +1662,7 @@ thuChiRoutes.post('/api/phieu-chi', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   POST /api/phieu-thu/:id/delete — Delete phieu thu
+   POST /api/phieu-thu/:id/delete - Delete phieu thu
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.post('/api/phieu-thu/:id/delete', async (c) => {
   const denied = denyUnlessCanEdit(c);
@@ -1673,7 +1673,7 @@ thuChiRoutes.post('/api/phieu-thu/:id/delete', async (c) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   POST /api/phieu-chi/:id/delete — Delete phieu chi
+   POST /api/phieu-chi/:id/delete - Delete phieu chi
    ══════════════════════════════════════════════════════════════ */
 thuChiRoutes.post('/api/phieu-chi/:id/delete', async (c) => {
   const denied = denyUnlessCanEdit(c);

@@ -1,7 +1,7 @@
 import type { Role } from '../types';
 
 /**
- * Tab/menu access uses users.role only (ROLE_PERMISSIONS) — custom_perms cannot add tabs.
+ * Tab/menu access uses users.role only (ROLE_PERMISSIONS) - custom_perms cannot add tabs.
  * Keys below are boolean overrides within allowed modules (admin configures per NV).
  */
 export type PermOverrideKey =
