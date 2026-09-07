@@ -102,6 +102,7 @@ export function layout(
   content: string,
   user: { display_name: string; role: string },
   activePage: string,
+  opts?: { fluid?: boolean },
 ): string {
   const userRole = user.role as Role;
   const visibleItems = ALL_NAV_ITEMS.filter((item) =>
@@ -110,6 +111,7 @@ export function layout(
   const sidebarLinks = visibleItems
     .map((item) => sidebarLink(item, activePage))
     .join("\n          ");
+  const containerCls = opts?.fluid ? "container-fluid" : "container";
 
   return `<!DOCTYPE html>
 <html lang="vi" dir="ltr" data-color-theme="Blue_Theme" data-layout="vertical" data-card="border" data-header-position="fixed">
@@ -178,7 +180,7 @@ export function layout(
     </header>
 
     <div class="body-wrapper pt-16 min-h-screen">
-      <div class="container py-6">
+      <div class="${containerCls} py-6">
         ${content}
       </div>
     </div>

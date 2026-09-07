@@ -38,6 +38,21 @@ export const DM_GROUP_TIENTO: Record<DauMucGroup, string> = {
   khac: 'K',
 };
 
+/** Built-in or custom đầu mục VT group (tuyen.dau_muc_group → dau_muc_nhom.id) */
+export interface DauMucNhom {
+  id: string;
+  ten: string;
+  tien_to: string;
+  mau: string;
+}
+
+/** Resolve display label for a group id (builtins first, then custom map, then fallback). */
+export function dmGroupLabel(id: string, custom?: Record<string, string>): string {
+  if (id in DM_GROUP_LABEL) return DM_GROUP_LABEL[id as DauMucGroup];
+  if (custom && custom[id]) return custom[id];
+  return id ? `Vận tải ${id}` : 'Vận tải khác';
+}
+
 export interface Env {
   DB: D1Database;
   SESSION_SECRET: string;
@@ -105,7 +120,7 @@ export interface Tuyen {
   diem_den: string;
   tien_to: string;
   mau: string;
-  dau_muc_group: DauMucGroup;
+  dau_muc_group: string;
   khoang_cach_km: number;
 }
 

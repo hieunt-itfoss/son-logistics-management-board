@@ -318,6 +318,15 @@ function controlClass(extra?: string): string {
   return extra ? `${base} ${extra}`.trim() : base;
 }
 
+/** Wrapper width: fill grid cells by default; honor explicit w-/min-w-/shrink classes (filters). */
+function comboboxWrapClass(extra?: string): string {
+  const hasExplicitWidth =
+    !!extra && /\b(w-|min-w-|max-w-|shrink-)/.test(extra);
+  return ["htql-combobox", "relative", hasExplicitWidth ? "" : "w-full min-w-0", extra]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function controlAttrs(
   attrs: ControlAttrs,
 ): { className: string; parts: string } {
@@ -368,6 +377,7 @@ export function input(attrs: ControlAttrs): string {
   return `<input class="${className}" ${parts}>`;
 }
 
+/** @deprecated Prefer searchSelect (combobox). Kept for rare legacy call sites. */
 export function select(
   attrs: ControlAttrs & { options: string },
 ): string {
@@ -383,28 +393,68 @@ export function textarea(attrs: ControlAttrs): string {
   return `<textarea class="${className}" ${parts}>${value}</textarea>`;
 }
 
-/** Type-to-search combobox — one field, hidden input holds the selected value */
+export type ComboboxOption = {
+  value: string;
+  label: string;
+  data?: Record<string, string>;
+};
+
+/** Type-to-search combobox — replaces native &lt;select&gt;/&lt;option&gt; */
 export function searchSelect(opts: {
-  id: string;
+  id?: string;
   name: string;
   required?: boolean;
   placeholder?: string;
-  options: { value: string; label: string }[];
+  options: ComboboxOption[];
   value?: string;
+  /** Extra classes on the wrapper (e.g. min-w-[10rem]) */
+  class?: string;
+  /** Prepend an empty option with this label (e.g. "— Tất cả —") */
+  emptyLabel?: string;
+  /** onchange handler on the hidden input */
+  onchange?: string;
+  /** Compact trigger for inline currency / short enums */
+  size?: "sm" | "md";
 }): string {
+  const id = opts.id || opts.name;
   const ph = esc(opts.placeholder ?? "Gõ để tìm...");
-  const dataOpts = esc(JSON.stringify(opts.options));
+  const options: ComboboxOption[] =
+    opts.emptyLabel != null
+      ? [{ value: "", label: opts.emptyLabel }, ...opts.options]
+      : opts.options;
+  const dataOpts = esc(JSON.stringify(options));
   const req = opts.required ? ' data-required="true"' : "";
   const selected = opts.value
-    ? opts.options.find((o) => o.value === opts.value)
+    ? options.find((o) => o.value === opts.value)
     : undefined;
   const inputVal = selected ? esc(selected.label) : "";
   const hiddenVal = selected ? esc(selected.value) : "";
-  return `<div class="htql-combobox relative w-full" data-htql-combobox data-id="${esc(opts.id)}" data-name="${esc(opts.name)}" data-options="${dataOpts}"${req} data-placeholder="${ph}">
-    <input type="text" id="${esc(opts.id)}_input" class="form-control w-full" placeholder="${ph}" autocomplete="off" value="${inputVal}" aria-autocomplete="list" aria-controls="${esc(opts.id)}_list" role="combobox" aria-expanded="false">
-    <input type="hidden" name="${esc(opts.name)}" id="${esc(opts.id)}" value="${hiddenVal}">
-    <ul id="${esc(opts.id)}_list" class="htql-combobox-list hidden" role="listbox"></ul>
+  const onchange = opts.onchange ? ` onchange="${esc(opts.onchange)}"` : "";
+  const wrapCls = comboboxWrapClass(opts.class);
+  const isSm = opts.size === "sm";
+  const triggerCls = isSm ? "combobox-trigger-sm" : "combobox-trigger";
+  const chevronCls = isSm
+    ? "pointer-events-none absolute end-1.5 top-1/2 -translate-y-1/2 text-bodytext dark:text-darklink text-sm"
+    : "pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 text-bodytext dark:text-darklink text-lg";
+  return `<div class="${wrapCls}" data-htql-combobox data-id="${esc(id)}" data-name="${esc(opts.name)}" data-options="${dataOpts}"${req} data-placeholder="${ph}">
+    <div class="relative">
+      <input type="text" id="${esc(id)}_input" class="${triggerCls}" placeholder="${ph}" autocomplete="off" value="${inputVal}" aria-autocomplete="list" aria-controls="${esc(id)}_list" role="combobox" aria-expanded="false">
+      <iconify-icon icon="solar:alt-arrow-down-linear" class="${chevronCls}" aria-hidden="true"></iconify-icon>
+    </div>
+    <input type="hidden" name="${esc(opts.name)}" id="${esc(id)}" value="${hiddenVal}"${onchange}>
+    <ul id="${esc(id)}_list" class="combobox-menu hidden" role="listbox"></ul>
   </div>`;
+}
+
+/** Shortcut: build ComboboxOption[] from value/label pairs */
+export function comboOpts(
+  items: { value: string; label: string; data?: Record<string, string> }[],
+): ComboboxOption[] {
+  return items.map((i) => ({
+    value: i.value,
+    label: i.label,
+    ...(i.data ? { data: i.data } : {}),
+  }));
 }
 
 export function alert(

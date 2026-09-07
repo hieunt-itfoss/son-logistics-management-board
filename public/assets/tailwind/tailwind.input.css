@@ -78,6 +78,11 @@
     }
 }
 
+/** Full-bleed content width for data-heavy pages (e.g. phiếu grid on 4K) */
+@utility container-fluid {
+    @apply w-full max-w-none mx-auto px-4 sm:px-5;
+}
+
 @utility container-xl {
     @apply max-w-[1320px];
 }
@@ -124,6 +129,31 @@
 
 @utility form-control {
     @apply rounded-md border border-bordergray dark:border-darkborder bg-transparent w-full text-sm py-2 px-3;
+}
+
+/* Searchable combobox — TailwindAdmin form + dropdown tokens */
+@utility combobox-menu {
+    @apply absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border border-bordergray dark:border-darkborder bg-white dark:bg-darkgray shadow-md dark:shadow-dark-md;
+}
+
+@utility combobox-item {
+    @apply px-3 py-2 text-sm cursor-pointer text-dark dark:text-white hover:bg-lightprimary hover:text-primary focus:bg-lightprimary focus:text-primary focus:outline-none;
+}
+
+@utility combobox-item-active {
+    @apply bg-lightprimary text-primary;
+}
+
+@utility combobox-empty {
+    @apply px-3 py-2 text-sm text-bodytext dark:text-darklink;
+}
+
+@utility combobox-trigger {
+    @apply form-control w-full pr-9;
+}
+
+@utility combobox-trigger-sm {
+    @apply form-control w-full text-xs py-1.5 pl-2 pr-6;
 }
 
 

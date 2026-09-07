@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, ChamCong, NhanVien, AppVariables } from '../types';
 import { layout } from '../utils/layout';
-import { pageHeader, card, dataTable, tableRow, tableEmpty, btnPrimary, btnSecondary, modalShell, modalFooterInner, formGroup, formField, input, select, FILTER_LABEL_CLASS } from '../utils/ui';
+import { pageHeader, card, dataTable, tableRow, tableEmpty, btnPrimary, btnSecondary, modalShell, modalFooterInner, formGroup, formField, input, searchSelect, FILTER_LABEL_CLASS } from '../utils/ui';
 
 export const chamCongRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -33,9 +33,7 @@ chamCongRoutes.get('/', async (c) => {
 
   const { results: records } = await c.env.DB.prepare(sql).bind(...binds).all<ChamCong & { nhan_vien_ten: string }>();
 
-  const nvOpts = (nvs as NhanVien[]).map(n =>
-    `<option value="${n.id}"${n.id === nvFilter ? ' selected' : ''}>${esc(n.ten)}</option>`
-  ).join('');
+  const nvCombo = (nvs as NhanVien[]).map((n) => ({ value: n.id, label: n.ten }));
 
   const rows = records.map((r) => {
     const color = TT_COLOR[r.trang_thai] || 'bg-lightgray text-bodytext';
@@ -58,7 +56,10 @@ chamCongRoutes.get('/', async (c) => {
       <div class="card-body">
       <form method="GET" action="/cham-cong" class="flex flex-wrap items-end gap-3">
         ${formField('Tháng', input({ type: 'month', name: 'thang', value: esc(month), class: 'w-auto' }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('NV', select({ name: 'nv', class: 'w-auto', options: `<option value="">Tất cả</option>${nvOpts}` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('NV', searchSelect({
+          name: 'nv', class: 'w-[10rem] shrink-0', emptyLabel: '— Tất cả —', value: nvFilter, placeholder: 'Nhân viên',
+          options: nvCombo,
+        }), { labelClass: FILTER_LABEL_CLASS, class: 'shrink-0' })}
         <button type="submit" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 text-sm cursor-pointer">Lọc</button>
         ${month || nvFilter ? '<a href="/cham-cong" class="text-sm text-primary hover:underline self-center">Xoá lọc</a>' : ''}
       </form>
@@ -74,8 +75,19 @@ chamCongRoutes.get('/', async (c) => {
       size: 'md',
       body: `<form id="ccForm" class="space-y-4">
           ${formGroup('Ngày', input({ type: 'date', name: 'ngay', value: new Date().toISOString().slice(0, 10), required: true }), { required: true })}
-          ${formGroup('Nhân viên', select({ name: 'nhan_vien_id', options: (nvs as NhanVien[]).map(n => `<option value="${n.id}">${esc(n.ten)}</option>`).join('') }), { required: true })}
-          ${formGroup('Trạng thái', select({ name: 'trang_thai', options: '<option value="co">Có mặt</option><option value="vang">Vắng</option><option value="nua_ngay">Nửa ngày</option><option value="phep">Phép</option>' }))}
+          ${formGroup('Nhân viên', searchSelect({
+            name: 'nhan_vien_id', required: true, placeholder: 'Chọn nhân viên',
+            options: nvCombo,
+          }), { required: true })}
+          ${formGroup('Trạng thái', searchSelect({
+            name: 'trang_thai', value: 'co', placeholder: 'Trạng thái',
+            options: [
+              { value: 'co', label: 'Có mặt' },
+              { value: 'vang', label: 'Vắng' },
+              { value: 'nua_ngay', label: 'Nửa ngày' },
+              { value: 'phep', label: 'Phép' },
+            ],
+          }))}
           ${formGroup('Ghi chú', input({ type: 'text', name: 'ghi_chu' }))}
         </form>`,
       footer: modalFooterInner(

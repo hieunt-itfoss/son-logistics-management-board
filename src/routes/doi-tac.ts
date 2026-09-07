@@ -14,7 +14,7 @@ import {
   modalFooterSplit,
   formGroup,
   input,
-  select,
+  searchSelect,
   textarea,
   searchField,
 } from '../utils/ui';
@@ -95,9 +95,7 @@ function pagingBar(opts: {
     p.set('per', String(per));
     return `/doi-tac?${p.toString()}`;
   };
-  const perOpts = PAGE_SIZES.map(
-    (n) => `<option value="${n}"${n === opts.per ? ' selected' : ''}>${n} / trang</option>`,
-  ).join('');
+  const perOpts = PAGE_SIZES.map((n) => ({ value: String(n), label: `${n} / trang` }));
   const prevDisabled = opts.page <= 1;
   const nextDisabled = opts.page >= opts.pages;
   return `
@@ -111,7 +109,10 @@ function pagingBar(opts: {
           ${opts.sort ? `<input type="hidden" name="sort" value="${esc(opts.sort)}">` : ''}
           ${opts.search ? `<input type="hidden" name="q" value="${esc(opts.search)}">` : ''}
           <input type="hidden" name="page" value="1">
-          ${select({ name: 'per', class: 'w-auto', onchange: 'this.form.submit()', options: perOpts })}
+          ${searchSelect({
+            name: 'per', class: 'w-[7rem] shrink-0', value: String(opts.per), placeholder: 'Mỗi trang',
+            onchange: 'this.form.submit()', options: perOpts,
+          })}
         </form>
         <a href="${prevDisabled ? '#' : qs(opts.page - 1, opts.per)}"
            class="btn-outline border-bordergray text-link dark:text-darklink text-sm px-3 py-1.5 ${prevDisabled ? 'opacity-40 pointer-events-none' : ''}">← Trước</a>
@@ -215,8 +216,21 @@ doiTacRoutes.get('/', async (c) => {
           ${formGroup('Địa chỉ', input({ name: 'dia_chi', id: 'kh_dc' }))}
           ${formGroup('SĐT', input({ name: 'sdt', id: 'kh_sdt' }))}
           <div class="grid grid-cols-2 gap-4">
-            ${formGroup('Đánh giá', select({ name: 'danh_gia', id: 'kh_dg', options: '<option value="">Mặc định</option><option value="binhthuong">🟡 Bình thường</option><option value="canhbao">🔴 Cảnh báo</option>' }))}
-            ${formGroup('Tiền tệ', select({ name: 'tien_te', id: 'kh_tiente', options: '<option value="PLN">PLN</option><option value="EUR">EUR</option><option value="USD">USD</option>' }))}
+            ${formGroup('Đánh giá', searchSelect({
+              name: 'danh_gia', id: 'kh_dg', emptyLabel: 'Mặc định', placeholder: 'Đánh giá',
+              options: [
+                { value: 'binhthuong', label: '🟡 Bình thường' },
+                { value: 'canhbao', label: '🔴 Cảnh báo' },
+              ],
+            }))}
+            ${formGroup('Tiền tệ', searchSelect({
+              name: 'tien_te', id: 'kh_tiente', value: 'PLN', placeholder: 'Tiền tệ',
+              options: [
+                { value: 'PLN', label: 'PLN' },
+                { value: 'EUR', label: 'EUR' },
+                { value: 'USD', label: 'USD' },
+              ],
+            }))}
           </div>
           ${formGroup('Ghi chú', textarea({ name: 'ghi_chu', id: 'kh_ghichu', rows: '2' }))}
         </form>`,
@@ -285,8 +299,8 @@ doiTacRoutes.get('/', async (c) => {
           document.getElementById('kh_han').value = d.han_tt || 30;
           document.getElementById('kh_dc').value = d.dia_chi || '';
           document.getElementById('kh_sdt').value = d.sdt || '';
-          document.getElementById('kh_dg').value = d.danh_gia || '';
-          document.getElementById('kh_tiente').value = d.tien_te || 'PLN';
+          htqlComboboxSet('kh_dg', d.danh_gia || '');
+          htqlComboboxSet('kh_tiente', d.tien_te || 'PLN');
           document.getElementById('kh_ghichu').value = d.ghi_chu || '';
         });
       } else {
@@ -294,6 +308,8 @@ doiTacRoutes.get('/', async (c) => {
         document.getElementById('khDelBtn').classList.add('hidden');
         document.getElementById('khForm').reset();
         document.getElementById('kh_id').value = '';
+        htqlComboboxSet('kh_dg', '');
+        htqlComboboxSet('kh_tiente', 'PLN');
       }
       htqlOpenModal('khModal');
     }
@@ -645,14 +661,18 @@ async function renderKhachList(db: D1Database, sort: string, search: string, pag
           <input type="hidden" name="sub" value="khach">
           <input type="hidden" name="page" value="1">
           <input type="hidden" name="per" value="${per}">
-          ${select({ name: 'sort', onchange: 'this.form.submit()', class: 'w-auto shrink-0', options: `
-            <option value="abc" ${sort === 'abc' ? 'selected' : ''}>A → Z</option>
-            <option value="zyx" ${sort === 'zyx' ? 'selected' : ''}>Z → A</option>
-            <option value="noNhieu" ${sort === 'noNhieu' ? 'selected' : ''}>Nợ nhiều nhất</option>
-            <option value="noIt" ${sort === 'noIt' ? 'selected' : ''}>Nợ ít nhất</option>
-            <option value="cbCao" ${sort === 'cbCao' ? 'selected' : ''}>Cảnh báo (cao→thấp)</option>
-            <option value="cbThap" ${sort === 'cbThap' ? 'selected' : ''}>Cảnh báo (thấp→cao)</option>
-          ` })}
+          ${searchSelect({
+            name: 'sort', onchange: 'this.form.submit()', class: 'w-[11rem] shrink-0',
+            value: sort, placeholder: 'Sắp xếp',
+            options: [
+              { value: 'abc', label: 'A → Z' },
+              { value: 'zyx', label: 'Z → A' },
+              { value: 'noNhieu', label: 'Nợ nhiều nhất' },
+              { value: 'noIt', label: 'Nợ ít nhất' },
+              { value: 'cbCao', label: 'Cảnh báo (cao→thấp)' },
+              { value: 'cbThap', label: 'Cảnh báo (thấp→cao)' },
+            ],
+          })}
           ${doiTacSearchField(search)}
         </form>
       </div>
@@ -831,10 +851,14 @@ async function renderHangList(db: D1Database, sort: string, search: string, page
           <input type="hidden" name="sub" value="hang">
           <input type="hidden" name="page" value="1">
           <input type="hidden" name="per" value="${per}">
-          ${select({ name: 'sort', onchange: 'this.form.submit()', class: 'w-auto shrink-0', options: `
-            <option value="abc" ${sort === 'abc' ? 'selected' : ''}>A → Z</option>
-            <option value="zyx" ${sort === 'zyx' ? 'selected' : ''}>Z → A</option>
-          ` })}
+          ${searchSelect({
+            name: 'sort', onchange: 'this.form.submit()', class: 'w-[8rem] shrink-0',
+            value: sort, placeholder: 'Sắp xếp',
+            options: [
+              { value: 'abc', label: 'A → Z' },
+              { value: 'zyx', label: 'Z → A' },
+            ],
+          })}
           ${doiTacSearchField(search)}
         </form>
       </div>
