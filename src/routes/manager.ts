@@ -15,7 +15,7 @@ import {
   formGroup,
   formField,
   input,
-  select,
+  searchSelect,
 } from "../utils/ui";
 import { ROLE_LABELS, hashPassword } from "../middleware/auth";
 import {
@@ -42,7 +42,7 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return "-";
+  if (!d) return "—";
   return d.slice(0, 10);
 }
 
@@ -76,7 +76,7 @@ function permCell(role: Role, key: PermOverrideKey): string {
   const v = getEffectivePerms(role, "{}")[key];
   return v
     ? '<span class="text-success font-bold">✓</span>'
-    : '<span class="text-bodytext">-</span>';
+    : '<span class="text-bodytext">—</span>';
 }
 
 const BACKUP_TABLES = [
@@ -215,14 +215,14 @@ managerRoutes.get("/", async (c) => {
       const customBadge =
         n > 0
           ? `<span class="inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-lightwarning text-warning">${n} ghi đè</span>`
-          : '<span class="text-xs text-bodytext">- mặc định -</span>';
+          : '<span class="text-xs text-bodytext">— mặc định —</span>';
       return tableRow(
         [
           `<span class="font-mono text-bodytext">${esc(nv.id)}</span>`,
           `<span class="font-medium text-dark dark:text-white">${esc(nv.ten)}</span>`,
           `<span class="inline-block px-2 py-0.5 rounded-md text-xs font-medium ${color}">${NV_ROLE_LABELS[nv.vai_tro] || nv.vai_tro}</span>`,
           customBadge,
-          esc(nv.sdt || "-"),
+          esc(nv.sdt || "—"),
           tableActions(
             `editNV('${nv.id}')`,
             isAdmin ? `deleteNV('${nv.id}')` : undefined,
@@ -241,7 +241,7 @@ managerRoutes.get("/", async (c) => {
         `<div class="py-2 px-4 border-b border-light-dark text-sm text-bodytext flex flex-wrap gap-1">
       <span class="text-xs font-mono text-bodytext">${fmtDate(a.ngay)} ${a.gio || ""}</span>
       <span class="text-primary font-medium">${esc(a.nguoi_label || "")}</span>
-      <span>- ${esc(a.hanh_dong || "")}</span>
+      <span>— ${esc(a.hanh_dong || "")}</span>
       <strong class="text-dark dark:text-white">${esc(a.target || "")}</strong>
       <span class="text-bodytext">${esc(a.chi_tiet || "")}</span>
     </div>`,
@@ -339,10 +339,10 @@ managerRoutes.get("/", async (c) => {
                   : '<span class="inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-lighterror text-error">Đã khoá</span>';
                 const mustChangeBadge = u.must_change_password
                   ? '<span class="inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-lightwarning text-warning">Phải đổi MK</span>'
-                  : "-";
+                  : "—";
                 const nvLink = u.nv_ten
                   ? `<span class="text-xs text-primary">${esc(u.nv_ten)}</span>`
-                  : '<span class="text-xs text-bodytext">-</span>';
+                  : '<span class="text-xs text-bodytext">—</span>';
                 const actions = `<div class="flex items-center gap-1">
           <button type="button" class="htql-table-action" onclick="openResetPwdModal('${u.id}','${esc(u.username)}')" title="Reset mật khẩu">
             <iconify-icon icon="solar:key-linear" width="18"></iconify-icon>
@@ -397,10 +397,11 @@ managerRoutes.get("/", async (c) => {
       size: "lg",
       body: `<div class="space-y-4">
           <p class="text-xs text-bodytext bg-lightprimary/30 dark:bg-darkborder rounded-lg p-3" id="userPermHint"></p>
-          ${formField('Vai trò <span class="text-xs text-bodytext">(chỉ admin đổi được)</span>', select({
+          ${formField('Vai trò <span class="text-xs text-bodytext">(chỉ admin đổi được)</span>', searchSelect({
             id: 'userPermRole',
-            title: 'Chỉ admin được đổi vai trò',
-            options: PERM_MATRIX_ROLES.map((r) => `<option value="${r}">${esc(ROLE_LABELS[r] || r)}</option>`).join(''),
+            name: 'userPermRole',
+            placeholder: 'Vai trò',
+            options: PERM_MATRIX_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] || r })),
           }))}
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -426,7 +427,7 @@ managerRoutes.get("/", async (c) => {
       htqlCloseModal('userPermModal');
       editingNvId = null;
     }
-    function permBoolLabel(v) { return v ? '✓' : '-'; }
+    function permBoolLabel(v) { return v ? '✓' : '—'; }
     async function openNvPermModal(nvId) {
       editingNvId = nvId;
       const res = await fetch('/manager/api/nhan-vien/' + encodeURIComponent(nvId) + '/perms');
@@ -434,9 +435,9 @@ managerRoutes.get("/", async (c) => {
       const data = await res.json();
       document.getElementById('userPermTitle').textContent = '🔐 ' + data.ten;
       document.getElementById('userPermHint').innerHTML =
-        'NV <b>' + data.id + '</b> - ' + data.ten + '. Tích &quot;Ghi đè&quot; để khác mặc định vai trò; bỏ tích = kế thừa.'
+        'NV <b>' + data.id + '</b> — ' + data.ten + '. Tích &quot;Ghi đè&quot; để khác mặc định vai trò; bỏ tích = kế thừa.'
         + (data.linked_username ? ' Tài khoản <b>' + data.linked_username + '</b> sẽ đồng bộ khi lưu.' : '');
-      document.getElementById('userPermRole').value = data.role;
+      htqlComboboxSet('userPermRole', data.role);
       userPermDefaults = data.defaults || {};
       const overrides = data.overrides || {};
       const labels = ${JSON.stringify(PERM_OVERRIDE_LABELS)};
@@ -446,19 +447,35 @@ managerRoutes.get("/", async (c) => {
         const def = userPermDefaults[k];
         const has = overrides[k] !== undefined;
         const val = has ? overrides[k] : true;
+        const permId = 'perm_val_' + k;
         tbody += '<tr class="border-b border-light-dark"><td>' + (labels[k] || k) + '</td>'
           + '<td class="text-center">' + permBoolLabel(def) + '</td>'
           + '<td class="text-center"><input type="checkbox" data-perm-key="' + k + '" data-override-cb ' + (has ? 'checked' : '') + '></td>'
-          + '<td class="text-center"><select class="form-control w-full" data-perm-key="' + k + '" data-perm-val ' + (has ? '' : 'disabled') + '>'
-          + '<option value="true"' + (val === true ? ' selected' : '') + '>✓ Có</option>'
-          + '<option value="false"' + (val === false ? ' selected' : '') + '>✗ Không</option></select></td></tr>';
+          + '<td class="text-center" data-perm-key="' + k + '" data-perm-cell>'
+          + htqlComboboxHtml({
+              id: permId,
+              name: permId,
+              value: val === true ? 'true' : 'false',
+              placeholder: 'Giá trị',
+              class: has ? 'w-[6.5rem] shrink-0' : 'w-[6.5rem] shrink-0 opacity-50 pointer-events-none',
+              options: [
+                { value: 'true', label: '✓ Có' },
+                { value: 'false', label: '✗ Không' },
+              ],
+            })
+          + '</td></tr>';
       });
       document.getElementById('userPermRows').innerHTML = tbody;
+      htqlInitComboboxes(document.getElementById('userPermRows'));
       document.querySelectorAll('[data-override-cb]').forEach(function(cb) {
         cb.addEventListener('change', function() {
           const k = cb.getAttribute('data-perm-key');
-          const sel = document.querySelector('[data-perm-val][data-perm-key="' + k + '"]');
-          if (sel) sel.disabled = !cb.checked;
+          const cell = document.querySelector('[data-perm-cell][data-perm-key="' + k + '"]');
+          const wrap = cell && cell.querySelector('[data-htql-combobox]');
+          if (wrap) {
+            if (cb.checked) wrap.classList.remove('opacity-50', 'pointer-events-none');
+            else wrap.classList.add('opacity-50', 'pointer-events-none');
+          }
         });
       });
       document.getElementById('userPermRole').onchange = async function() {
@@ -482,8 +499,8 @@ managerRoutes.get("/", async (c) => {
       document.querySelectorAll('[data-override-cb]').forEach(function(cb) {
         const k = cb.getAttribute('data-perm-key');
         if (cb.checked) {
-          const sel = document.querySelector('[data-perm-val][data-perm-key="' + k + '"]');
-          overrides[k] = sel && sel.value === 'true';
+          const got = htqlComboboxGet('perm_val_' + k);
+          overrides[k] = !!(got && got.value === 'true');
         }
       });
       const res = await fetch('/manager/api/nhan-vien/' + encodeURIComponent(editingNvId) + '/perms', {
@@ -533,8 +550,14 @@ managerRoutes.get("/", async (c) => {
               <input type="text" name="display_name" required class="form-control w-full" placeholder="VD: Nguyễn Văn A">
             </div>
             <div class="grid grid-cols-2 gap-3 pt-2">
-              ${formGroup('Vai trò', select({ name: 'role', options: PERM_MATRIX_ROLES.map((r) => `<option value="${r}">${esc(ROLE_LABELS[r] || r)}</option>`).join('') }))}
-              ${formGroup('Liên kết NV', select({ name: 'nhan_vien_id', options: `<option value="">- Không liên kết -</option>${(nvsForSelect || []).map((nv) => `<option value="${nv.id}">${esc(nv.ten)} (${nv.id})</option>`).join('')}` }))}
+              ${formGroup('Vai trò', searchSelect({
+                name: 'role', placeholder: 'Vai trò',
+                options: PERM_MATRIX_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] || r })),
+              }))}
+              ${formGroup('Liên kết NV', searchSelect({
+                name: 'nhan_vien_id', emptyLabel: '— Không liên kết —', placeholder: 'Nhân viên',
+                options: (nvsForSelect || []).map((nv) => ({ value: nv.id, label: `${nv.ten} (${nv.id})` })),
+              }))}
             </div>
             <div class="flex items-center gap-2 pt-2">
               <input type="checkbox" name="must_change_password" id="cuCreateMustChange" checked class="w-4 h-4 rounded border-bordergray text-primary">
@@ -640,7 +663,10 @@ managerRoutes.get("/", async (c) => {
             <label class="block text-sm font-medium text-dark dark:text-white mb-1">Họ tên <span class="text-error">*</span></label>
             <input type="text" name="ten" required class="form-control w-full">
           </div>
-          ${formGroup('Vai trò', select({ name: 'vai_tro', options: Object.entries(NV_ROLE_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('') }))}
+          ${formGroup('Vai trò', searchSelect({
+            name: 'vai_tro', value: 'nhanvien', placeholder: 'Vai trò',
+            options: Object.entries(NV_ROLE_LABELS).map(([k, v]) => ({ value: k, label: v })),
+          }))}
           <div>
             <label class="block text-sm font-medium text-dark dark:text-white mb-1">SĐT</label>
             <input type="text" name="sdt" class="form-control w-full">
@@ -657,7 +683,13 @@ managerRoutes.get("/", async (c) => {
     })}
     <script>
     let editingNVId = null;
-    function showAddNVForm() { editingNVId = null; document.getElementById('nvModalTitle').textContent = 'Thêm nhân viên'; document.getElementById('nvManagerForm').reset(); htqlOpenModal('addNVModal'); }
+    function showAddNVForm() {
+      editingNVId = null;
+      document.getElementById('nvModalTitle').textContent = 'Thêm nhân viên';
+      document.getElementById('nvManagerForm').reset();
+      htqlComboboxSet('vai_tro', 'nhanvien');
+      htqlOpenModal('addNVModal');
+    }
     function hideNVForm() { htqlCloseModal('addNVModal'); }
     async function editNV(id) {
       editingNVId = id;
@@ -666,7 +698,8 @@ managerRoutes.get("/", async (c) => {
       const nv = await res.json();
       document.getElementById('nvModalTitle').textContent = 'Sửa ' + nv.id;
       const f = document.getElementById('nvManagerForm');
-      f.id.value = nv.id || ''; f.ten.value = nv.ten || ''; f.vai_tro.value = nv.vai_tro || 'nhanvien'; f.sdt.value = nv.sdt || ''; f.dia_chi.value = nv.dia_chi || '';
+      f.id.value = nv.id || ''; f.ten.value = nv.ten || ''; f.sdt.value = nv.sdt || ''; f.dia_chi.value = nv.dia_chi || '';
+      htqlComboboxSet('vai_tro', nv.vai_tro || 'nhanvien');
       htqlOpenModal('addNVModal');
     }
     async function deleteNV(id) {

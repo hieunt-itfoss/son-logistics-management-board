@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, NhanVien, VaiTro, AppVariables } from '../types';
 import { layout } from '../utils/layout';
-import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, tableActions, btnPrimary, searchField, formField, input, select, textarea } from '../utils/ui';
+import { pageHeader, dataTable, tableRow, tableEmpty, tableActionLink, tableActions, btnPrimary, searchField, formField, input, searchSelect, textarea } from '../utils/ui';
 
 export const nhanVienRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -145,11 +145,7 @@ nhanVienRoutes.get('/create', async (c) => {
   const lastNum = maxRows.length > 0 ? parseInt(maxRows[0].id.replace('NV-', ''), 10) : 0;
   const nextId = `NV-${String(lastNum + 1).padStart(3, '0')}`;
 
-  const roleOptions = ALL_ROLES.map(r =>
-    `<option value="${r}">${ROLE_LABELS[r]}</option>`
-  ).join('');
-
-  const content = nvFormHtml('Thêm nhân viên mới', nextId, '', '', 'laixe', '', '', '', '', roleOptions, false);
+  const content = nvFormHtml('Thêm nhân viên mới', nextId, '', '', 'laixe', '', '', '', '', false);
 
   return c.html(layout('Thêm nhân viên', content, user, 'nhan-vien'));
 });
@@ -163,15 +159,11 @@ nhanVienRoutes.get('/:id/edit', async (c) => {
   const nv = await c.env.DB.prepare('SELECT * FROM nhan_vien WHERE id = ? AND active = 1').bind(id).first<NhanVien>();
   if (!nv) return c.redirect('/nhan-vien');
 
-  const roleOptions = ALL_ROLES.map(r =>
-    `<option value="${r}" ${r === nv.vai_tro ? 'selected' : ''}>${ROLE_LABELS[r]}</option>`
-  ).join('');
-
   const content = nvFormHtml(
     `Sửa NV ${nv.id}`,
     nv.id, nv.ten, nv.id, nv.vai_tro,
     nv.sdt, nv.so_giay_to, nv.dia_chi, nv.ghi_chu,
-    roleOptions, true
+    true
   );
 
   return c.html(layout('Sửa nhân viên', content, user, 'nhan-vien'));
@@ -181,8 +173,9 @@ function nvFormHtml(
   title: string,
   id: string, ten: string, idField: string, vaiTro: string,
   sdt: string, soGiayTo: string, diaChi: string, ghiChu: string,
-  roleOptions: string, isEdit: boolean,
+  isEdit: boolean,
 ): string {
+  const roleCombo = ALL_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }));
   return `
     <div class="max-w-2xl mx-auto">
       <div class="flex items-center gap-3 mb-6">
@@ -199,7 +192,10 @@ function nvFormHtml(
             ...(isEdit ? { readonly: true, class: 'bg-lightgray dark:bg-darkgray text-bodytext' } : { required: true }),
           }), { required: !isEdit })}
           ${formField('Họ tên', input({ type: 'text', name: 'ten', value: escapeHtml(ten), required: true }), { required: true })}
-          ${formField('Vai trò', select({ name: 'vai_tro', options: roleOptions }))}
+          ${formField('Vai trò', searchSelect({
+            name: 'vai_tro', value: vaiTro, placeholder: 'Vai trò',
+            options: roleCombo,
+          }))}
           ${formField('SĐT', input({ type: 'text', name: 'sdt', value: escapeHtml(sdt), placeholder: '+48 ...' }))}
           ${formField('Số giấy tờ', input({ type: 'text', name: 'so_giay_to', value: escapeHtml(soGiayTo), placeholder: 'PESEL ...' }))}
           ${formField('Địa chỉ', input({ type: 'text', name: 'dia_chi', value: escapeHtml(diaChi) }))}

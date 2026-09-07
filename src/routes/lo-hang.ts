@@ -8,11 +8,17 @@ import {
   modalFooterInner,
   btnModalChip,
   btnSecondary,
+  btnPrimary,
+  btnDanger,
   btnModalOutline,
   searchField,
   formField,
   input,
-  select,
+  searchSelect,
+  card,
+  pageHeader,
+  kpiCard,
+  badge,
   FILTER_LABEL_CLASS,
 } from '../utils/ui';
 import {
@@ -125,14 +131,14 @@ function fmtNum(n: number): string {
 }
 
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return '-';
+  if (!d) return '\u2014';
   const parts = d.split('-');
   if (parts.length < 3) return d;
   return `${parts[2]}/${parts[1]}`;
 }
 
 function fmtDateFull(d: string | null | undefined): string {
-  if (!d) return '-';
+  if (!d) return '\u2014';
   const parts = d.split('-');
   if (parts.length < 3) return d;
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -212,7 +218,7 @@ const LO_HANG_SQL = `
   LEFT JOIN nhan_vien nv2 ON lh.nguoi_thu = nv2.id
 `;
 
-// ─── GET / - Main Grid ───────────────────────────────────────
+// ─── GET / — Main Grid ───────────────────────────────────────
 loHangRoutes.get('/', async (c) => {
   const user = c.get('user');
   const role = user.role as Role;
@@ -237,16 +243,28 @@ loHangRoutes.get('/', async (c) => {
     conditions.push(`cx.tai_xe_id = (SELECT nv.id FROM nhan_vien nv WHERE nv.vai_tro = 'laixe' LIMIT 1)`);
   }
 
-  // Date range filter on chuyen_xe.ngay_di
+  // Date range filter on chuyen_xe.ngay_di.
+  // Phiếu chưa gắn chuyến (DK) have NULL ngay_di — include them via created_at
+  // so they are not hidden by the default "thisMonth" filter.
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
   const todayStr = `${yyyy}-${mm}-${dd}`;
 
+  const pushDateRange = (from: string, to: string) => {
+    conditions.push(`(
+      (cx.ngay_di >= ? AND cx.ngay_di <= ?)
+      OR (
+        (lh.chuyen_xe_id IS NULL OR lh.chuyen_xe_id = '')
+        AND date(lh.created_at) >= ? AND date(lh.created_at) <= ?
+      )
+    )`);
+    params.push(from, to, from, to);
+  };
+
   if (filterRange === 'today') {
-    conditions.push(`cx.ngay_di = ?`);
-    params.push(todayStr);
+    pushDateRange(todayStr, todayStr);
   } else if (filterRange === 'thisWeek') {
     const dayOfWeek = today.getDay();
     const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -254,21 +272,17 @@ loHangRoutes.get('/', async (c) => {
     monday.setDate(today.getDate() + mondayOffset);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
-    conditions.push(`cx.ngay_di >= ? AND cx.ngay_di <= ?`);
-    params.push(`${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`);
-    params.push(`${sunday.getFullYear()}-${String(sunday.getMonth()+1).padStart(2,'0')}-${String(sunday.getDate()).padStart(2,'0')}`);
+    const from = `${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`;
+    const to = `${sunday.getFullYear()}-${String(sunday.getMonth()+1).padStart(2,'0')}-${String(sunday.getDate()).padStart(2,'0')}`;
+    pushDateRange(from, to);
   } else if (filterRange === 'thisMonth') {
-    conditions.push(`cx.ngay_di >= ? AND cx.ngay_di <= ?`);
-    params.push(`${yyyy}-${mm}-01`);
-    params.push(`${yyyy}-${mm}-${dd}`);
+    pushDateRange(`${yyyy}-${mm}-01`, todayStr);
   } else if (filterRange === 'custom' && customFrom && customTo) {
-    conditions.push(`cx.ngay_di >= ? AND cx.ngay_di <= ?`);
-    params.push(customFrom);
-    params.push(customTo);
+    pushDateRange(customFrom, customTo);
   }
   // 'all' = no date filter
 
-  // Column filter - supports multiple columns at once.
+  // Column filter — supports multiple columns at once.
   // Source: 'filters' param (JSON [{c,v}]) + legacy fc/fv pair (backward compatible).
   const activeFilters: { c: string; v: string }[] = [];
   const filtersParam = c.req.query('filters') || '';
@@ -324,28 +338,9 @@ loHangRoutes.get('/', async (c) => {
 
   const lots = results as LoRow[];
 
-  // Fetch dropdown data for create form
+  // Lookup data for filter chip display
   const khRes = await c.env.DB.prepare('SELECT id, ten, ma_kh FROM khach_hang ORDER BY ten').all();
   const hangRes = await c.env.DB.prepare('SELECT id, ten FROM hang ORDER BY ten').all();
-  const cxRes = await c.env.DB.prepare(
-    `SELECT cx.id, t.ten as tuyen_ten, x.bien_so, x.so_xe, cx.ngay_di
-     FROM chuyen_xe cx LEFT JOIN tuyen t ON cx.tuyen_id = t.id LEFT JOIN xe x ON cx.xe_id = x.id
-     ORDER BY cx.ngay_di DESC LIMIT 200`
-  ).all();
-  const nvRes = await c.env.DB.prepare(`SELECT id, ten FROM nhan_vien WHERE active = 1 ORDER BY ten`).all();
-
-  const khOptions = (khRes.results as {id:string;ten:string;ma_kh:string}[]).map(k =>
-    `<option value="${esc(k.id)}">${esc(k.ma_kh)} - ${esc(k.ten)}</option>`
-  ).join('');
-  const hangOptions = (hangRes.results as {id:string;ten:string}[]).map(h =>
-    `<option value="${esc(h.id)}">${esc(h.ten)}</option>`
-  ).join('');
-  const cxOptions = (cxRes.results as {id:string;tuyen_ten:string;bien_so:string;so_xe:string;ngay_di:string}[]).map(cx =>
-    `<option value="${esc(cx.id)}">${esc(cx.id)} | ${esc(cx.tuyen_ten||'-')} | ${esc(cx.bien_so||'-')} | ${cx.ngay_di||'-'}</option>`
-  ).join('');
-  const nvOptions = (nvRes.results as {id:string;ten:string}[]).map(nv =>
-    `<option value="${esc(nv.id)}">${esc(nv.ten)}</option>`
-  ).join('');
 
   // Column visibility
   const cols = getVisibleCols(role, hiddenCols);
@@ -430,7 +425,7 @@ loHangRoutes.get('/', async (c) => {
   // ─── Build HTML ────────────────────────────────────────────
   let html = '<div class="htql-dt" data-htql-dt>';
 
-  // Bulk action bar - light green background, hidden until rows are selected
+  // Bulk action bar — light green background, hidden until rows are selected
   html += `<div id="bulkBar" class="hidden htql-bulkbar">
     <label class="flex items-center gap-2 font-semibold mr-2 cursor-pointer">
       <input type="checkbox" id="bulkBarChk" class="rounded border-success" checked>
@@ -474,13 +469,20 @@ loHangRoutes.get('/', async (c) => {
   html += `<input type="hidden" name="hide" value="${esc(hiddenCols)}">`;
   html += `<input type="hidden" name="collapsed" value="${esc(collapsedParamEffective)}">`;
 
-  html += select({ name: 'range', onchange: 'this.form.submit()', class: 'w-auto', options: `
-    <option value="today" ${filterRange==='today'?'selected':''}>Hôm nay</option>
-    <option value="thisWeek" ${filterRange==='thisWeek'?'selected':''}>Tuần này</option>
-    <option value="thisMonth" ${filterRange==='thisMonth'?'selected':''}>Tháng này</option>
-    <option value="custom" ${filterRange==='custom'?'selected':''}>Tùy chọn</option>
-    <option value="all" ${filterRange==='all'?'selected':''}>Tất cả</option>
-  ` });
+  html += searchSelect({
+    name: 'range',
+    class: 'w-[9rem] shrink-0',
+    onchange: 'this.form.submit()',
+    value: filterRange,
+    placeholder: 'Thời gian',
+    options: [
+      { value: 'today', label: 'Hôm nay' },
+      { value: 'thisWeek', label: 'Tuần này' },
+      { value: 'thisMonth', label: 'Tháng này' },
+      { value: 'custom', label: 'Tùy chọn' },
+      { value: 'all', label: 'Tất cả' },
+    ],
+  });
 
   if (filterRange === 'custom') {
     html += input({ type: 'date', name: 'from', value: esc(customFrom), onchange: 'this.form.submit()', class: 'w-auto' });
@@ -591,7 +593,7 @@ loHangRoutes.get('/', async (c) => {
     });
     const fmtCcyMulti = (m: Record<string, number>) => {
       const arr = Object.entries(m).filter(([, v]) => v > 0).map(([t, v]) => `${fmtNum(v)} <span class="text-xs text-bodytext dark:text-darklink">${t}</span>`);
-      return arr.length ? arr.join('<br>') : '-';
+      return arr.length ? arr.join('<br>') : '\u2014';
     };
 
     const isCollapsed = collapsed.has(chuyenId);
@@ -610,8 +612,8 @@ loHangRoutes.get('/', async (c) => {
       const tdCls = isHang ? ' htql-col-hang' : isMoney ? ' htql-col-money' : '';
       let v = '';
       if (col === 'ma') v = isNoChuyen ? `<strong class="text-warning">Chưa chuyến (${chLots.length})</strong>` : `<strong>${esc(chuyenId)}</strong>`;
-      else if (col === 'ngayLenXe') v = firstLo?.ngay_di ? fmtDate(firstLo.ngay_di) : '-';
-      else if (col === 'ngayVe') v = firstLo?.ngay_den ? fmtDate(firstLo.ngay_den) : '-';
+      else if (col === 'ngayLenXe') v = firstLo?.ngay_di ? fmtDate(firstLo.ngay_di) : '\u2014';
+      else if (col === 'ngayVe') v = firstLo?.ngay_den ? fmtDate(firstLo.ngay_den) : '\u2014';
       else if (col === 'soXe') v = esc(firstLo?.so_xe);
       else if (col === 'bienSo') v = esc(firstLo?.bien_so);
       else if (col === 'tuyenVT') v = firstLo?.tuyen_ten
@@ -648,19 +650,19 @@ loHangRoutes.get('/', async (c) => {
               sortVal = lo.id;
               break;
             case 'ngayLenXe':
-              v = lo.ngay_di ? `<a href="${buildGridUrl(c,{fc:'ngayLenXe',fv:lo.ngay_di})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_di)}</a>` : '<span class="text-warning">- (chưa)</span>';
+              v = lo.ngay_di ? `<a href="${buildGridUrl(c,{fc:'ngayLenXe',fv:lo.ngay_di})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_di)}</a>` : '<span class="text-warning">\u2014 (chưa)</span>';
               sortVal = lo.ngay_di || '';
               break;
             case 'ngayVe':
-              v = lo.ngay_den ? `<a href="${buildGridUrl(c,{fc:'ngayVe',fv:lo.ngay_den})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_den)}</a>` : '<span class="text-warning">- (chưa)</span>';
+              v = lo.ngay_den ? `<a href="${buildGridUrl(c,{fc:'ngayVe',fv:lo.ngay_den})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${fmtDate(lo.ngay_den)}</a>` : '<span class="text-warning">\u2014 (chưa)</span>';
               sortVal = lo.ngay_den || '';
               break;
             case 'soXe':
-              v = lo.so_xe ? `<a href="${buildGridUrl(c,{fc:'soXe',fv:lo.so_xe})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.so_xe)}</a>` : '<span class="text-bodytext dark:text-darklink">-</span>';
+              v = lo.so_xe ? `<a href="${buildGridUrl(c,{fc:'soXe',fv:lo.so_xe})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.so_xe)}</a>` : '<span class="text-bodytext dark:text-darklink">\u2014</span>';
               sortVal = lo.so_xe || '';
               break;
             case 'bienSo':
-              v = lo.bien_so ? `<a href="${buildGridUrl(c,{fc:'bienSo',fv:lo.bien_so})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.bien_so)}</a>` : '<span class="text-bodytext dark:text-darklink">-</span>';
+              v = lo.bien_so ? `<a href="${buildGridUrl(c,{fc:'bienSo',fv:lo.bien_so})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.bien_so)}</a>` : '<span class="text-bodytext dark:text-darklink">\u2014</span>';
               sortVal = lo.bien_so || '';
               break;
             case 'tuyenVT':
@@ -676,11 +678,11 @@ loHangRoutes.get('/', async (c) => {
               sortVal = lo.khach_hang_ten || '';
               break;
             case 'nguoiTao':
-              v = lo.nguoi_tao_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiTao',fv:lo.nguoi_tao})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_tao_ten)}</a>` : '-';
+              v = lo.nguoi_tao_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiTao',fv:lo.nguoi_tao})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_tao_ten)}</a>` : '\u2014';
               sortVal = lo.nguoi_tao_ten || '';
               break;
             case 'nguoiThu':
-              v = lo.nguoi_thu_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiThu',fv:lo.nguoi_thu})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_thu_ten)}</a>` : '-';
+              v = lo.nguoi_thu_ten ? `<a href="${buildGridUrl(c,{fc:'nguoiThu',fv:lo.nguoi_thu})}" class="text-dark dark:text-darklink hover:text-primary no-underline">${esc(lo.nguoi_thu_ten)}</a>` : '\u2014';
               sortVal = lo.nguoi_thu_ten || '';
               break;
             case 'soKien':
@@ -700,7 +702,7 @@ loHangRoutes.get('/', async (c) => {
               sortVal = String(luuKho);
               break;
             case 'ghiChu':
-              v = lo.ly_do_thieu ? `<span class="text-xs">${esc(lo.ly_do_thieu)}</span>` : '-';
+              v = lo.ly_do_thieu ? `<span class="text-xs">${esc(lo.ly_do_thieu)}</span>` : '\u2014';
               sortVal = lo.ly_do_thieu || '';
               break;
             case 'donGia':
@@ -716,7 +718,7 @@ loHangRoutes.get('/', async (c) => {
             case 'soTienHang':
               v = (lo.so_tien_hang > 0)
                 ? `${fmtNum(lo.so_tien_hang)} <span class="text-xs text-bodytext dark:text-darklink">${esc(lo.tien_te_th || lo.tien_te)}</span>`
-                : '-';
+                : '\u2014';
               sortVal = String(lo.so_tien_hang || 0);
               break;
           }
@@ -1112,8 +1114,8 @@ loHangRoutes.get('/', async (c) => {
     document.getElementById('bulkTTCount').textContent = ids.length;
     var today = new Date().toISOString().slice(0,10);
     var d = document.getElementById('bulkTTNgay'); d.value = today; d.max = '';
-    document.getElementById('bulkTTLoai').value = 'vantai';
-    document.getElementById('bulkTTHinhThuc').value = 'TM';
+    if (window.htqlComboboxSet) { htqlComboboxSet('bulkTTLoai', 'vantai'); htqlComboboxSet('bulkTTHinhThuc', 'TM'); }
+    else { document.getElementById('bulkTTLoai').value = 'vantai'; document.getElementById('bulkTTHinhThuc').value = 'TM'; }
     document.getElementById('bulkTTWarn').classList.add('hidden');
     var ngoaiWrap = document.getElementById('bulkTTNgoaiWrap');
     if (IS_ADMIN) { ngoaiWrap.classList.remove('hidden'); } else { ngoaiWrap.classList.add('hidden'); }
@@ -1155,19 +1157,25 @@ loHangRoutes.get('/', async (c) => {
     <div class="bg-white dark:bg-darkgray rounded-lg shadow-xl w-full max-w-md p-5">
       <h3 class="text-lg font-semibold mb-3 text-dark dark:text-white">💰 Đã thanh toán <span id="bulkTTCount" class="text-primary">0</span> phiếu</h3>
       <div class="space-y-3">
-        ${formField('Loại tiền thu', select({ id: 'bulkTTLoai', options: `
-            <option value="vantai">Vận tải (thành tiền)</option>
-            <option value="tienhang">Tiền hàng</option>
-            <option value="ca-hai">Cả hai (tạo 2 nhóm phiếu thu)</option>
-          ` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Loại tiền thu', searchSelect({
+          id: 'bulkTTLoai', name: 'bulkTTLoai', value: 'vantai', placeholder: 'Loại tiền',
+          options: [
+            { value: 'vantai', label: 'Vận tải (thành tiền)' },
+            { value: 'tienhang', label: 'Tiền hàng' },
+            { value: 'ca-hai', label: 'Cả hai (tạo 2 nhóm phiếu thu)' },
+          ],
+        }), { labelClass: FILTER_LABEL_CLASS })}
         ${formField('Ngày thu', `
           ${input({ type: 'date', id: 'bulkTTNgay' })}
-          <p id="bulkTTWarn" class="hidden text-xs text-error mt-1">⚠ Ngày quá khứ - sẽ làm thay đổi số dư/chốt sổ các ngày sau.</p>
+          <p id="bulkTTWarn" class="hidden text-xs text-error mt-1">⚠ Ngày quá khứ — sẽ làm thay đổi số dư/chốt sổ các ngày sau.</p>
         `, { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Hình thức', select({ id: 'bulkTTHinhThuc', options: `
-            <option value="TM">Tiền mặt</option>
-            <option value="CK">Chuyển khoản</option>
-          ` }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Hình thức', searchSelect({
+          id: 'bulkTTHinhThuc', name: 'bulkTTHinhThuc', value: 'TM', placeholder: 'Hình thức',
+          options: [
+            { value: 'TM', label: 'Tiền mặt' },
+            { value: 'CK', label: 'Chuyển khoản' },
+          ],
+        }), { labelClass: FILTER_LABEL_CLASS })}
         <div id="bulkTTNgoaiWrap" class="hidden border-t pt-3">
           <label class="flex items-start gap-2 text-sm">
             <input type="checkbox" id="bulkTTNgoai" class="mt-0.5 rounded border-gray-300">
@@ -1388,16 +1396,16 @@ loHangRoutes.get('/', async (c) => {
     </script>`;
   }
 
-  return c.html(layout('Phiếu', html, user, 'lo-hang'));
+  return c.html(layout('Phiếu', html, user, 'lo-hang', { fluid: true }));
 });
 
-// ─── GET /create - Create Form ────────────────────────────────
+// ─── GET /create — Create Form ────────────────────────────────
 loHangRoutes.get('/create', async (c) => {
   const user = c.get('user');
   const perm = loHangPerm(c.get('perms'));
 
   if (!perm.canCreateLo) {
-    return c.html(layout('Không có quyền', '<div class="text-center py-12 text-red-500">Bạn không có quyền tạo phiếu</div>', user, 'lo-hang'));
+    return c.html(layout('Không có quyền', '<div class="text-center py-12 text-error">Bạn không có quyền tạo phiếu</div>', user, 'lo-hang'));
   }
 
   const khRes = await c.env.DB.prepare('SELECT id, ten, ma_kh FROM khach_hang ORDER BY ten').all();
@@ -1409,44 +1417,59 @@ loHangRoutes.get('/create', async (c) => {
   ).all();
   const nvRes = await c.env.DB.prepare(`SELECT id, ten FROM nhan_vien WHERE active = 1 ORDER BY ten`).all();
 
-  const khOptions = (khRes.results as {id:string;ten:string;ma_kh:string}[]).map(k =>
-    `<option value="${esc(k.id)}">${esc(k.ma_kh)} - ${esc(k.ten)}</option>`
-  ).join('');
-  const hangOptions = (hangRes.results as {id:string;ten:string}[]).map(h =>
-    `<option value="${esc(h.id)}">${esc(h.ten)}</option>`
-  ).join('');
-  const cxOptions = (cxRes.results as {id:string;tuyen_ten:string;bien_so:string;ngay_di:string}[]).map(cx =>
-    `<option value="${esc(cx.id)}">${esc(cx.id)} | ${esc(cx.tuyen_ten||'-')} | ${esc(cx.bien_so||'-')} | ${cx.ngay_di||'-'}</option>`
-  ).join('');
-  const nvOptions = (nvRes.results as {id:string;ten:string}[]).map(nv =>
-    `<option value="${esc(nv.id)}">${esc(nv.ten)}</option>`
-  ).join('');
+  const khCombo = (khRes.results as {id:string;ten:string;ma_kh:string}[]).map(k =>
+    ({ value: k.id, label: `${k.ma_kh} - ${k.ten}` })
+  );
+  const hangCombo = (hangRes.results as {id:string;ten:string}[]).map(h =>
+    ({ value: h.id, label: h.ten })
+  );
+  const cxCombo = (cxRes.results as {id:string;tuyen_ten:string;bien_so:string;ngay_di:string}[]).map(cx =>
+    ({ value: cx.id, label: `${cx.id} | ${cx.tuyen_ten||'-'} | ${cx.bien_so||'-'} | ${cx.ngay_di||'-'}` })
+  );
+  const nvCombo = (nvRes.results as {id:string;ten:string}[]).map(nv =>
+    ({ value: nv.id, label: nv.ten })
+  );
 
-  let html = `<a href="/lo-hang" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm mb-4">
+  let html = `<a href="/lo-hang" class="inline-flex items-center gap-1 text-primary hover:underline text-sm mb-4">
     <iconify-icon icon="solar:arrow-left-linear"></iconify-icon> Quay lại danh sách
   </a>`;
 
-  html += `<div class="bg-white rounded-lg shadow p-6">
-    <h2 class="text-lg font-bold text-gray-900 mb-4">Tạo phiếu mới</h2>
-    <form id="createForm" class="grid grid-cols-2 sm:grid-cols-3 gap-4" onsubmit="return createLo(event)">
-      ${formField('Chuyến xe', select({ name: 'chuyen_xe_id', id: 'chuyenSelect', options: `<option value="">-- Chưa có chuyến (DK) --</option>${cxOptions}` }))}
-      ${formField('Khách hàng', select({ name: 'khach_hang_id', required: true, options: `<option value="">-- Chọn KH --</option>${khOptions}` }), { required: true })}
-      ${formField('Hãng', select({ name: 'hang_id', required: true, options: `<option value="">-- Chọn hãng --</option>${hangOptions}` }), { required: true })}
+  html += card({
+    title: 'Tạo phiếu mới',
+    class: 'w-full',
+    body: `<form id="createForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" onsubmit="return createLo(event)">
+      ${formField('Chuyến xe', searchSelect({ name: 'chuyen_xe_id', id: 'chuyenSelect', emptyLabel: 'Chưa có chuyến (DK)', placeholder: 'Chọn chuyến...', options: cxCombo }))}
+      ${formField('Khách hàng', searchSelect({ name: 'khach_hang_id', required: true, emptyLabel: 'Chọn KH', placeholder: 'Chọn khách hàng...', options: khCombo }), { required: true })}
+      ${formField('Hãng', searchSelect({ name: 'hang_id', required: true, emptyLabel: 'Chọn hãng', placeholder: 'Chọn hãng...', options: hangCombo }), { required: true })}
       ${formField('Số kiện', input({ type: 'number', name: 'so_kien', value: '1', min: '0', oninput: 'calcThanhTien()' }))}
       ${formField('Đơn giá', input({ type: 'number', name: 'don_gia', value: '0', step: '0.01', oninput: 'calcThanhTien()' }))}
-      ${formField('Tiền tệ', select({ name: 'tien_te', options: '<option value="PLN">PLN</option><option value="EUR">EUR</option><option value="USD">USD</option>' }))}
+      ${formField('Tiền tệ', searchSelect({ name: 'tien_te', value: 'PLN', placeholder: 'Tiền tệ', options: [{ value: 'PLN', label: 'PLN' }, { value: 'EUR', label: 'EUR' }, { value: 'USD', label: 'USD' }] }))}
       ${formField('Thành tiền (tự tính)', input({ type: 'number', name: 'thanh_tien', value: '0', step: '0.01', class: 'bg-lightgray dark:bg-darkgray', readonly: true }))}
-      ${formField('Số tiền hàng', input({ type: 'number', name: 'so_tien_hang', value: '0', step: '0.01' }))}
+      ${formField('Số tiền hàng', `<div class="flex gap-1.5 items-center min-w-0">
+        ${input({ type: 'number', name: 'so_tien_hang', value: '0', step: '0.01', class: 'min-w-0 flex-1' })}
+        ${searchSelect({
+          name: 'tien_te_th',
+          id: 'tien_te_th',
+          size: 'sm',
+          class: 'w-[4.25rem] shrink-0',
+          placeholder: 'TT',
+          options: [
+            { value: 'PLN', label: 'PLN' },
+            { value: 'EUR', label: 'EUR' },
+            { value: 'USD', label: 'USD' },
+          ],
+        })}
+      </div>`)}
       ${formField('Giảm giá', input({ type: 'number', name: 'giam_gia', value: '0', step: '0.01', oninput: 'calcThanhTien()' }))}
-      ${formField('Người tạo', select({ name: 'nguoi_tao', options: `<option value="">-- Chọn --</option>${nvOptions}` }))}
-      ${formField('Người thu', select({ name: 'nguoi_thu', options: `<option value="">-- Chọn --</option>${nvOptions}` }))}
+      ${formField('Người tạo', searchSelect({ name: 'nguoi_tao', emptyLabel: 'Chọn', placeholder: 'Người tạo...', options: nvCombo }))}
+      ${formField('Người thu', searchSelect({ name: 'nguoi_thu', emptyLabel: 'Chọn', placeholder: 'Người thu...', options: nvCombo }))}
       ${formField('Ghi chú', input({ type: 'text', name: 'ly_do_thieu' }))}
-      <div class="col-span-2 sm:col-span-3 flex gap-2 pt-2">
-        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium cursor-pointer">Tạo phiếu</button>
-        <a href="/lo-hang" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm">Hủy</a>
+      <div class="col-span-1 sm:col-span-2 lg:col-span-3 xl:col-span-4 flex flex-wrap gap-2 pt-2">
+        ${btnPrimary('Tạo phiếu', { type: 'submit' })}
+        <a href="/lo-hang" class="btn-outline border-bordergray text-link dark:text-darklink inline-flex items-center px-4 py-2">Hủy</a>
       </div>
-    </form>
-  </div>`;
+    </form>`,
+  });
 
   html += `<script>
   function calcThanhTien() {
@@ -1461,6 +1484,8 @@ loHangRoutes.get('/create', async (c) => {
     const form = e.target;
     const fd = new FormData(form);
     const body = Object.fromEntries(fd.entries());
+    if (!body.khach_hang_id) { alert('Chọn khách hàng'); return false; }
+    if (!body.hang_id) { alert('Chọn hãng'); return false; }
     body.so_kien = Number(body.so_kien) || 0;
     body.don_gia = Number(body.don_gia) || 0;
     body.thanh_tien = Number(body.thanh_tien) || 0;
@@ -1472,7 +1497,10 @@ loHangRoutes.get('/create', async (c) => {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(body)
     });
-    if (res.ok) { window.location.href = '/lo-hang'; }
+    if (res.ok) {
+      const data = await res.json();
+      window.location.href = data.id ? '/lo-hang/' + data.id : '/lo-hang?range=all';
+    }
     else { const err = await res.json(); alert(err.error || 'Lỗi'); }
     return false;
   }
@@ -1481,7 +1509,7 @@ loHangRoutes.get('/create', async (c) => {
   return c.html(layout('Tạo phiếu', html, user, 'lo-hang'));
 });
 
-// ─── GET /:id - Detail View ──────────────────────────────────
+// ─── GET /:id — Detail View ──────────────────────────────────
 loHangRoutes.get('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
@@ -1492,7 +1520,7 @@ loHangRoutes.get('/:id', async (c) => {
   ).bind(id).first<LoRow>();
 
   if (!lo) {
-    return c.html(layout('Không tìm thấy', '<div class="text-center py-12 text-gray-400">Phiếu không tồn tại</div>', user, 'lo-hang'));
+    return c.html(layout('Không tìm thấy', '<div class="text-center py-12 text-bodytext dark:text-darklink">Phiếu không tồn tại</div>', user, 'lo-hang'));
   }
 
   // Audit log
@@ -1515,145 +1543,130 @@ loHangRoutes.get('/:id', async (c) => {
   ).all();
   const nvRes = await c.env.DB.prepare(`SELECT id, ten FROM nhan_vien WHERE active = 1 ORDER BY ten`).all();
 
-  const khOptions = (khRes.results as {id:string;ten:string;ma_kh:string}[]).map(k =>
-    `<option value="${esc(k.id)}" ${k.id===lo.khach_hang_id?'selected':''}>${esc(k.ma_kh)} - ${esc(k.ten)}</option>`
-  ).join('');
-  const hangOptions = (hangRes.results as {id:string;ten:string}[]).map(h =>
-    `<option value="${esc(h.id)}" ${h.id===lo.hang_id?'selected':''}>${esc(h.ten)}</option>`
-  ).join('');
-  const cxOptions = (cxRes.results as {id:string;tuyen_ten:string;bien_so:string;ngay_di:string}[]).map(cx =>
-    `<option value="${esc(cx.id)}" ${cx.id===lo.chuyen_xe_id?'selected':''}>${esc(cx.id)} | ${esc(cx.tuyen_ten||'-')} | ${esc(cx.bien_so||'-')} | ${cx.ngay_di||'-'}</option>`
-  ).join('');
-  const nvTaoOptions = (nvRes.results as {id:string;ten:string}[]).map(nv =>
-    `<option value="${esc(nv.id)}" ${nv.id===lo.nguoi_tao?'selected':''}>${esc(nv.ten)}</option>`
-  ).join('');
-  const nvThuOptions = (nvRes.results as {id:string;ten:string}[]).map(nv =>
-    `<option value="${esc(nv.id)}" ${nv.id===lo.nguoi_thu?'selected':''}>${esc(nv.ten)}</option>`
-  ).join('');
+  const khCombo = (khRes.results as {id:string;ten:string;ma_kh:string}[]).map(k =>
+    ({ value: k.id, label: `${k.ma_kh} - ${k.ten}` })
+  );
+  const hangCombo = (hangRes.results as {id:string;ten:string}[]).map(h =>
+    ({ value: h.id, label: h.ten })
+  );
+  const cxCombo = (cxRes.results as {id:string;tuyen_ten:string;bien_so:string;ngay_di:string}[]).map(cx =>
+    ({ value: cx.id, label: `${cx.id} | ${cx.tuyen_ten||'-'} | ${cx.bien_so||'-'} | ${cx.ngay_di||'-'}` })
+  );
+  const nvCombo = (nvRes.results as {id:string;ten:string}[]).map(nv =>
+    ({ value: nv.id, label: nv.ten })
+  );
 
   const luuKho = lo.so_kien - lo.da_tra_hang;
   const tienVT = lo.thanh_tien - (lo.giam_gia || 0);
 
-  // KPI cards
-  let html = `<a href="/lo-hang" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm mb-4">
+  // Detail layout — responsive wide: main + side stack on xl
+  let html = `<a href="/lo-hang" class="inline-flex items-center gap-1 text-primary hover:underline text-sm mb-4">
     <iconify-icon icon="solar:arrow-left-linear"></iconify-icon> Quay lại danh sách
   </a>`;
 
-  // Hero banner
-  html += `<div class="rounded-lg overflow-hidden mb-4" style="background:linear-gradient(135deg,#7c3aed 0%,#a855f7 100%)">
-    <div class="px-6 py-5 text-white">
-      <h1 class="text-xl font-bold mb-1">${esc(lo.id)}</h1>
-      <div class="text-sm opacity-90">
-        ${lo.khach_hang_ten ? esc(lo.khach_hang_ten) : '-'} \u00B7 ${lo.hang_ten ? esc(lo.hang_ten) : '-'} \u00B7 ${lo.ngay_di ? fmtDate(lo.ngay_di) : '-'}
-      </div>
-      <div class="flex flex-wrap gap-2 mt-3">
-        ${lo.tuyen_ten ? `<span class="bg-white/20 px-3 py-1 rounded-full text-xs">${esc(lo.tuyen_ten)}</span>` : ''}
-        ${lo.chuyen_xe_id ? `<span class="bg-white/20 px-3 py-1 rounded-full text-xs">${esc(lo.chuyen_xe_id)}</span>` : '<span class="bg-yellow-400/40 px-3 py-1 rounded-full text-xs">Chưa có chuyến</span>'}
-      </div>
-    </div>
-  </div>`;
+  html += pageHeader(esc(lo.id), {
+    subtitle: `${lo.khach_hang_ten ? esc(lo.khach_hang_ten) : '\u2014'} \u00B7 ${lo.hang_ten ? esc(lo.hang_ten) : '\u2014'} \u00B7 ${lo.ngay_di ? fmtDate(lo.ngay_di) : '\u2014'}`,
+    actions: `
+      <div class="flex flex-wrap gap-2">
+        ${lo.tuyen_ten ? badge(esc(lo.tuyen_ten), 'primary') : ''}
+        ${lo.chuyen_xe_id ? badge(esc(lo.chuyen_xe_id), 'neutral') : badge('Chưa có chuyến', 'warning')}
+      </div>`,
+  });
 
-  // KPI grid
-  html += `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">`;
-  html += kpiCard('Số kiện', String(lo.so_kien), `${lo.da_tra_hang}/${lo.so_kien} đã trả`, 'blue');
-  html += kpiCard('Tiền VT', `${fmtNum(tienVT)} ${lo.tien_te}`, lo.giam_gia > 0 ? `Đã giảm ${fmtNum(lo.giam_gia)}` : '', 'green');
+  html += `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">`;
+  html += kpiCard('Số kiện', String(lo.so_kien), { hintHtml: `${lo.da_tra_hang}/${lo.so_kien} đã trả`, icon: 'solar:box-bold-duotone', tone: 'primary' });
+  html += kpiCard('Tiền VT', `${fmtNum(tienVT)} ${lo.tien_te}`, { hintHtml: lo.giam_gia > 0 ? `Đã giảm ${fmtNum(lo.giam_gia)}` : undefined, icon: 'solar:wad-of-money-bold-duotone', tone: 'success' });
   if (lo.so_tien_hang > 0)
-    html += kpiCard('Tiền hàng', `${fmtNum(lo.so_tien_hang)} ${lo.tien_te_th || lo.tien_te}`, '', 'yellow');
-  html += kpiCard('Lưu kho', String(luuKho), luuKho > 0 ? 'Chưa trả hết' : 'Đã trả hết', luuKho > 0 ? 'purple' : 'green');
+    html += kpiCard('Tiền hàng', `${fmtNum(lo.so_tien_hang)} ${lo.tien_te_th || lo.tien_te}`, { icon: 'solar:box-minimalistic-bold-duotone', tone: 'warning' });
+  html += kpiCard('Lưu kho', String(luuKho), { hintHtml: luuKho > 0 ? 'Chưa trả hết' : 'Đã trả hết', icon: 'solar:warehouse-bold-duotone', tone: luuKho > 0 ? 'warning' : 'success' });
   html += `</div>`;
 
-  // Detail info
-  html += `<div class="bg-white rounded-lg shadow p-5 mb-4">
-    <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1">
-      <iconify-icon icon="solar:info-circle-linear"></iconify-icon> Thông tin phiếu
-    </h3>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">`;
-  html += infoRow('Mã phiếu', `<strong>${esc(lo.id)}</strong>`);
-  html += infoRow('Khách hàng', lo.khach_hang_ten ? `${esc(lo.khach_hang_ten)} (${esc(lo.ma_kh)})` : '-');
-  html += infoRow('Hãng giao', lo.hang_ten ? esc(lo.hang_ten) : '-');
-  if (lo.chuyen_xe_id) {
-    html += infoRow('Chuyến xe', `${esc(lo.chuyen_xe_id)} \u00B7 ${esc(lo.so_xe||'?')} (${esc(lo.bien_so||'?')}) \u00B7 ${esc(lo.tuyen_ten||'-')}`);
-    html += infoRow('Ngày đi \u2192 về', `${fmtDateFull(lo.ngay_di)} \u2192 ${fmtDateFull(lo.ngay_den)}`);
-  }
-  html += infoRow('Đơn giá', lo.don_gia > 0 ? `${fmtNum(lo.don_gia)} ${lo.tien_te} \u00D7 ${lo.so_kien} kiện = <strong>${fmtNum(lo.thanh_tien)} ${lo.tien_te}</strong>` : '<em class="text-gray-400">tổng</em>');
-  if (lo.giam_gia > 0) html += infoRow('Giảm giá', `${fmtNum(lo.giam_gia)} ${lo.tien_te}`);
-  if (lo.ly_do_thieu) html += infoRow('Lý do thiếu', `<span class="text-yellow-700">${esc(lo.ly_do_thieu)}</span>`);
-  html += infoRow('Người tạo', lo.nguoi_tao_ten ? esc(lo.nguoi_tao_ten) : '-');
-  html += infoRow('Người thu', lo.nguoi_thu_ten ? esc(lo.nguoi_thu_ten) : '-');
-  html += `</div></div>`;
+  const infoBody = `
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-1 text-sm">
+      ${infoRow('Mã phiếu', `<strong>${esc(lo.id)}</strong>`)}
+      ${infoRow('Khách hàng', lo.khach_hang_ten ? `${esc(lo.khach_hang_ten)} (${esc(lo.ma_kh)})` : '\u2014')}
+      ${infoRow('Hãng giao', lo.hang_ten ? esc(lo.hang_ten) : '\u2014')}
+      ${lo.chuyen_xe_id ? infoRow('Chuyến xe', `${esc(lo.chuyen_xe_id)} \u00B7 ${esc(lo.so_xe||'?')} (${esc(lo.bien_so||'?')}) \u00B7 ${esc(lo.tuyen_ten||'\u2014')}`) : ''}
+      ${lo.chuyen_xe_id ? infoRow('Ngày đi \u2192 về', `${fmtDateFull(lo.ngay_di)} \u2192 ${fmtDateFull(lo.ngay_den)}`) : ''}
+      ${infoRow('Đơn giá', lo.don_gia > 0 ? `${fmtNum(lo.don_gia)} ${lo.tien_te} \u00D7 ${lo.so_kien} kiện = <strong>${fmtNum(lo.thanh_tien)} ${lo.tien_te}</strong>` : '<em class="text-bodytext dark:text-darklink">tổng</em>')}
+      ${lo.giam_gia > 0 ? infoRow('Giảm giá', `${fmtNum(lo.giam_gia)} ${lo.tien_te}`) : ''}
+      ${lo.ly_do_thieu ? infoRow('Lý do thiếu', `<span class="text-warning">${esc(lo.ly_do_thieu)}</span>`) : ''}
+      ${infoRow('Người tạo', lo.nguoi_tao_ten ? esc(lo.nguoi_tao_ten) : '\u2014')}
+      ${infoRow('Người thu', lo.nguoi_thu_ten ? esc(lo.nguoi_thu_ten) : '\u2014')}
+    </div>`;
+
+  html += card({ title: 'Thông tin phiếu', body: infoBody, class: 'mb-6' });
 
   // Related receipt slips
   const phieuThus = phieuThuRes.results as {id:string;ngay:string;dau_muc:string;loai_tien:string;kieu_qt:string;so_tien:number;tien_te:string;gio:string}[];
   if (phieuThus.length > 0) {
-    html += `<div class="bg-white rounded-lg shadow p-5 mb-4">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">Lịch sử thanh toán (${phieuThus.length})</h3>
-      <div class="overflow-x-auto"><table class="min-w-full text-sm">
-        <thead class="bg-gray-50"><tr>
-          <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Mã</th>
-          <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Ngày</th>
-          <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Loại</th>
-          <th class="px-3 py-2 text-right text-xs font-medium text-gray-500">Số tiền</th>
-        </tr></thead><tbody>`;
+    let payRows = '';
     phieuThus.forEach(p => {
       const isTH = (p.loai_tien || 'vantai') === 'tienhang';
-      const tag = isTH
-        ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-yellow-100 text-yellow-700">TH</span>'
-        : '<span class="px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700">VT</span>';
-      html += `<tr class="border-b border-gray-100">
+      const tag = isTH ? badge('TH', 'warning') : badge('VT', 'primary');
+      payRows += `<tr class="border-b border-light-dark">
         <td class="px-3 py-2">${esc(p.id)}</td>
         <td class="px-3 py-2">${fmtDate(p.ngay)} ${p.gio||''}</td>
         <td class="px-3 py-2">${tag} ${p.kieu_qt === 'ung' ? 'Ứng' : 'Trả hết'}</td>
         <td class="px-3 py-2 text-right font-medium">${fmtNum(p.so_tien)} ${esc(p.tien_te)}</td>
       </tr>`;
     });
-    html += `</tbody></table></div></div>`;
+    html += card({
+      title: `Lịch sử thanh toán (${phieuThus.length})`,
+      class: 'mb-6',
+      body: `<div class="overflow-x-auto -mx-[30px] px-[30px]"><table class="htql-table min-w-full text-sm">
+        <thead><tr class="border-b border-light-dark">
+          <th>Mã</th><th>Ngày</th><th>Loại</th><th class="text-right">Số tiền</th>
+        </tr></thead><tbody>${payRows}</tbody>
+      </table></div>`,
+    });
   }
 
   // Audit log
   const audits = auditRes.results as {ngay:string;gio:string;nguoi_label:string;hanh_dong:string;chi_tiet:string}[];
   if (audits.length > 0) {
-    html += `<div class="bg-white rounded-lg shadow p-5 mb-4">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">Lịch sử thao tác (${audits.length})</h3>
-      <div class="max-h-64 overflow-y-auto space-y-1">`;
+    let auditHtml = '<div class="max-h-64 overflow-y-auto space-y-1">';
     audits.forEach(a => {
-      html += `<div class="text-xs py-1.5 border-b border-gray-50">${fmtDate(a.ngay)} ${a.gio||''} \u00B7 <strong class="text-blue-700">${esc(a.nguoi_label||'?')}</strong> \u00B7 ${esc(a.hanh_dong)} \u00B7 ${esc(a.chi_tiet||'')}</div>`;
+      auditHtml += `<div class="text-xs py-1.5 border-b border-light-dark">${fmtDate(a.ngay)} ${a.gio||''} \u00B7 <strong class="text-primary">${esc(a.nguoi_label||'?')}</strong> \u00B7 ${esc(a.hanh_dong)} \u00B7 ${esc(a.chi_tiet||'')}</div>`;
     });
-    html += `</div></div>`;
+    auditHtml += '</div>';
+    html += card({ title: `Lịch sử thao tác (${audits.length})`, body: auditHtml, class: 'mb-6' });
   }
 
   // Edit form (collapsible)
   if (perm.canEdit) {
-    html += `<div class="bg-white rounded-lg shadow p-5 mb-4">
-      <button onclick="document.getElementById('editForm').classList.toggle('hidden')" class="text-sm font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer mb-3">
-        <iconify-icon icon="solar:pen-linear"></iconify-icon> Sửa phiếu
-      </button>
-      <form id="editForm" class="hidden grid grid-cols-2 sm:grid-cols-3 gap-4" onsubmit="return saveEdit(event)">
+    html += card({
+      title: 'Sửa phiếu',
+      class: 'mb-6',
+      actions: `<button type="button" onclick="document.getElementById('editForm').classList.toggle('hidden')" class="text-sm text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
+        <iconify-icon icon="solar:pen-linear"></iconify-icon> Hiện / ẩn form
+      </button>`,
+      body: `<form id="editForm" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" onsubmit="return saveEdit(event)">
         <input type="hidden" name="id" value="${esc(lo.id)}">
-        ${formField('Khách hàng', select({ name: 'khach_hang_id', options: `<option value="">-- Chọn KH --</option>${khOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Hãng', select({ name: 'hang_id', options: `<option value="">-- Chọn hãng --</option>${hangOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Chuyến xe', select({ name: 'chuyen_xe_id', options: `<option value="">-- Chọn chuyến --</option>${cxOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Số kiện', input({ type: 'number', name: 'so_kien', value: String(lo.so_kien), min: '0' }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Đã trả hàng', input({ type: 'number', name: 'da_tra_hang', value: String(lo.da_tra_hang), min: '0' }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Đơn giá', input({ type: 'number', name: 'don_gia', value: String(lo.don_gia), step: '0.01' }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Tiền tệ', select({ name: 'tien_te', options: `
-            <option value="PLN" ${lo.tien_te==='PLN'?'selected':''}>PLN</option>
-            <option value="EUR" ${lo.tien_te==='EUR'?'selected':''}>EUR</option>
-            <option value="USD" ${lo.tien_te==='USD'?'selected':''}>USD</option>
-          ` }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Thành tiền', input({ type: 'number', name: 'thanh_tien', value: String(lo.thanh_tien), step: '0.01' }), { labelClass: FILTER_LABEL_CLASS })}
-        ${perm.canEditTienHang ? formField('Số tiền hàng', input({ type: 'number', name: 'so_tien_hang', value: String(lo.so_tien_hang), step: '0.01' }), { labelClass: FILTER_LABEL_CLASS }) : ''}
-        ${formField('Giảm giá', input({ type: 'number', name: 'giam_gia', value: String(lo.giam_gia), step: '0.01' }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Người tạo', select({ name: 'nguoi_tao', options: `<option value="">-- Chọn --</option>${nvTaoOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
-        ${formField('Người thu', select({ name: 'nguoi_thu', options: `<option value="">-- Chọn --</option>${nvThuOptions}` }), { labelClass: FILTER_LABEL_CLASS })}
-        <div class="col-span-2 sm:col-span-3">
-          ${formField('Lý do thiếu / Ghi chú', input({ type: 'text', name: 'ly_do_thieu', value: esc(lo.ly_do_thieu) }), { labelClass: FILTER_LABEL_CLASS })}
+        ${formField('Khách hàng', searchSelect({ name: 'khach_hang_id', emptyLabel: 'Chọn KH', placeholder: 'Chọn khách hàng...', value: lo.khach_hang_id || '', options: khCombo }))}
+        ${formField('Hãng', searchSelect({ name: 'hang_id', emptyLabel: 'Chọn hãng', placeholder: 'Chọn hãng...', value: lo.hang_id || '', options: hangCombo }))}
+        ${formField('Chuyến xe', searchSelect({ name: 'chuyen_xe_id', emptyLabel: 'Chọn chuyến', placeholder: 'Chọn chuyến...', value: lo.chuyen_xe_id || '', options: cxCombo }))}
+        ${formField('Số kiện', input({ type: 'number', name: 'so_kien', value: String(lo.so_kien), min: '0' }))}
+        ${formField('Đã trả hàng', input({ type: 'number', name: 'da_tra_hang', value: String(lo.da_tra_hang), min: '0' }))}
+        ${formField('Đơn giá', input({ type: 'number', name: 'don_gia', value: String(lo.don_gia), step: '0.01' }))}
+        ${formField('Tiền tệ', searchSelect({
+          name: 'tien_te', value: lo.tien_te || 'PLN', placeholder: 'Tiền tệ',
+          options: [{ value: 'PLN', label: 'PLN' }, { value: 'EUR', label: 'EUR' }, { value: 'USD', label: 'USD' }],
+        }))}
+        ${formField('Thành tiền', input({ type: 'number', name: 'thanh_tien', value: String(lo.thanh_tien), step: '0.01' }))}
+        ${perm.canEditTienHang ? formField('Số tiền hàng', input({ type: 'number', name: 'so_tien_hang', value: String(lo.so_tien_hang), step: '0.01' })) : ''}
+        ${formField('Giảm giá', input({ type: 'number', name: 'giam_gia', value: String(lo.giam_gia), step: '0.01' }))}
+        ${formField('Người tạo', searchSelect({ name: 'nguoi_tao', emptyLabel: 'Chọn', placeholder: 'Người tạo...', value: lo.nguoi_tao || '', options: nvCombo }))}
+        ${formField('Người thu', searchSelect({ name: 'nguoi_thu', emptyLabel: 'Chọn', placeholder: 'Người thu...', value: lo.nguoi_thu || '', options: nvCombo }))}
+        <div class="col-span-1 sm:col-span-2 lg:col-span-3 xl:col-span-4">
+          ${formField('Lý do thiếu / Ghi chú', input({ type: 'text', name: 'ly_do_thieu', value: esc(lo.ly_do_thieu) }))}
         </div>
-        <div class="col-span-2 sm:col-span-3 flex gap-2">
-          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm cursor-pointer">Lưu thay đổi</button>
-          ${perm.canDelete ? `<button type="button" onclick="deleteLo('${esc(lo.id)}')" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm cursor-pointer">Xoá phiếu</button>` : ''}
+        <div class="col-span-1 sm:col-span-2 lg:col-span-3 xl:col-span-4 flex flex-wrap gap-2">
+          ${btnPrimary('Lưu thay đổi', { type: 'submit' })}
+          ${perm.canDelete ? btnDanger('Xoá phiếu', { onclick: `deleteLo('${esc(lo.id)}')` }) : ''}
         </div>
-      </form>
-    </div>`;
+      </form>`,
+    });
   }
 
   html += `<script>
@@ -1686,7 +1699,7 @@ loHangRoutes.get('/:id', async (c) => {
   return c.html(layout('Phiếu: ' + id, html, user, 'lo-hang'));
 });
 
-// ─── POST /api/lo-hang - Create ──────────────────────────────
+// ─── POST /api/lo-hang — Create ──────────────────────────────
 loHangRoutes.post('/api/lo-hang', async (c) => {
   const user = c.get('user');
   const body = await c.req.json<{
@@ -1702,7 +1715,18 @@ loHangRoutes.post('/api/lo-hang', async (c) => {
     nguoi_tao: string;
     nguoi_thu: string;
     ly_do_thieu: string;
+    tien_te_th?: string;
   }>();
+
+  const khachHangId = (body.khach_hang_id || '').trim();
+  const hangId = (body.hang_id || '').trim();
+  if (!khachHangId) return c.json({ error: 'Chọn khách hàng' }, 400);
+  if (!hangId) return c.json({ error: 'Chọn hãng' }, 400);
+
+  const khOk = await c.env.DB.prepare('SELECT id FROM khach_hang WHERE id=?').bind(khachHangId).first();
+  if (!khOk) return c.json({ error: 'Khách hàng không tồn tại' }, 400);
+  const hangOk = await c.env.DB.prepare('SELECT id FROM hang WHERE id=?').bind(hangId).first();
+  if (!hangOk) return c.json({ error: 'Hãng không tồn tại' }, 400);
 
   // Generate ma
   let id: string;
@@ -1743,8 +1767,8 @@ loHangRoutes.post('/api/lo-hang', async (c) => {
   ).bind(
     id,
     body.chuyen_xe_id || '',
-    body.khach_hang_id,
-    body.hang_id,
+    khachHangId,
+    hangId,
     body.so_kien || 0,
     0,
     body.ly_do_thieu || '',
@@ -1755,7 +1779,7 @@ loHangRoutes.post('/api/lo-hang', async (c) => {
     body.giam_gia || 0,
     body.nguoi_tao || '',
     body.nguoi_thu || '',
-    body.tien_te || 'PLN'
+    body.tien_te_th || body.tien_te || 'PLN'
   ).run();
 
   // Audit log
@@ -1772,7 +1796,7 @@ loHangRoutes.post('/api/lo-hang', async (c) => {
   return c.json({ id }, 201);
 });
 
-// ─── PUT /api/lo-hang/:id - Update ───────────────────────────
+// ─── PUT /api/lo-hang/:id — Update ───────────────────────────
 loHangRoutes.put('/api/lo-hang/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
@@ -1792,6 +1816,11 @@ loHangRoutes.put('/api/lo-hang/:id', async (c) => {
     nguoi_thu: string;
   }>();
 
+  const khachHangId = (body.khach_hang_id || '').trim();
+  const hangId = (body.hang_id || '').trim();
+  if (!khachHangId) return c.json({ error: 'Chọn khách hàng' }, 400);
+  if (!hangId) return c.json({ error: 'Chọn hãng' }, 400);
+
   await c.env.DB.prepare(
     `UPDATE lo_hang SET
       chuyen_xe_id=?, khach_hang_id=?, hang_id=?, so_kien=?, da_tra_hang=?,
@@ -1801,8 +1830,8 @@ loHangRoutes.put('/api/lo-hang/:id', async (c) => {
      WHERE id=?`
   ).bind(
     body.chuyen_xe_id || '',
-    body.khach_hang_id,
-    body.hang_id,
+    khachHangId,
+    hangId,
     body.so_kien || 0,
     body.da_tra_hang || 0,
     body.ly_do_thieu || '',
@@ -1831,7 +1860,7 @@ loHangRoutes.put('/api/lo-hang/:id', async (c) => {
   return c.json({ success: true });
 });
 
-// ─── DELETE /api/lo-hang/:id - Delete ────────────────────────
+// ─── DELETE /api/lo-hang/:id — Delete ────────────────────────
 loHangRoutes.delete('/api/lo-hang/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
@@ -1852,7 +1881,7 @@ loHangRoutes.delete('/api/lo-hang/:id', async (c) => {
   return c.json({ success: true });
 });
 
-// ─── POST /api/lo-hang/bulk - Bulk Operations ────────────────
+// ─── POST /api/lo-hang/bulk — Bulk Operations ────────────────
 loHangRoutes.post('/api/lo-hang/bulk', async (c) => {
   const user = c.get('user');
   const body = await c.req.json<{
@@ -1958,9 +1987,9 @@ loHangRoutes.post('/api/lo-hang/bulk', async (c) => {
   return c.json({ error: 'Unknown action' }, 400);
 });
 
-// ─── POST /api/lo-hang/bulk-thanh-toan - Mark as paid ───
+// ─── POST /api/lo-hang/bulk-thanh-toan — Mark as paid ───
 // Create receipt slips (kieu_qt='trahet') grouped by customer + category + currency; or
-// mark "paid outside ledger" (admin only) - no receipt slip, visible to admin only.
+// mark "paid outside ledger" (admin only) — no receipt slip, visible to admin only.
 loHangRoutes.post('/api/lo-hang/bulk-thanh-toan', async (c) => {
   const user = c.get('user');
   const body = await c.req.json<{
@@ -1973,7 +2002,7 @@ loHangRoutes.post('/api/lo-hang/bulk-thanh-toan', async (c) => {
   const ids = body.ids || [];
   if (ids.length === 0) return c.json({ error: 'Chưa chọn phiếu' }, 400);
 
-  // Case C: paid outside ledger - admin only
+  // Case C: paid outside ledger — admin only
   if (body.khongVaoSo) {
     if (user.role !== 'admin') return c.json({ error: 'Chỉ admin được đánh dấu thanh toán ngoài sổ' }, 403);
     for (const id of ids) {
@@ -2372,25 +2401,9 @@ function tuyenColor(mau: string | null | undefined): string {
   }
 }
 
-function kpiCard(label: string, value: string, sub: string, color: string): string {
-  const bgMap: Record<string, string> = {
-    blue: 'bg-blue-50 border-blue-200',
-    green: 'bg-green-50 border-green-200',
-    yellow: 'bg-yellow-50 border-yellow-200',
-    purple: 'bg-purple-50 border-purple-200',
-    red: 'bg-red-50 border-red-200',
-  };
-  const cls = bgMap[color] || 'bg-gray-50 border-gray-200';
-  return `<div class="rounded-lg border ${cls} p-3">
-    <div class="text-xs text-gray-500 mb-1">${label}</div>
-    <div class="text-lg font-bold">${value}</div>
-    ${sub ? `<div class="text-xs text-gray-400 mt-0.5">${sub}</div>` : ''}
-  </div>`;
-}
-
 function infoRow(key: string, val: string): string {
-  return `<div class="flex justify-between py-1 border-b border-gray-50">
-    <span class="text-gray-500">${key}</span>
-    <span class="text-gray-900">${val}</span>
+  return `<div class="flex justify-between gap-3 py-1.5 border-b border-light-dark last:border-0">
+    <span class="text-bodytext dark:text-darklink shrink-0">${key}</span>
+    <span class="text-dark dark:text-white text-right">${val}</span>
   </div>`;
 }
