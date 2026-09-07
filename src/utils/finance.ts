@@ -24,7 +24,7 @@ export function addCcy(target: CcyMap, tte: string, amount: number): void {
   target[tte] = (target[tte] || 0) + amount;
 }
 
-/** Customer receivables (transport + merchandise) — same rules as doi-tac list */
+/** Customer receivables (transport + merchandise) - same rules as doi-tac list */
 export async function computeReceivables(db: D1Database): Promise<{
   totalByCcy: CcyMap;
   topDebtors: { id: string; ten: string; ma_kh: string; con_no: CcyMap; qua_han: number }[];

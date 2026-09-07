@@ -1,5 +1,5 @@
 /**
- * Import Excel workbooks — ported from reference index.html (SonLogistic v7)
+ * Import Excel workbooks - ported from reference index.html (SonLogistic v7)
  */
 
 import * as XLSX from 'xlsx';
@@ -486,7 +486,7 @@ export function buildImportPreview(
       if (tm) tuyen = tm.item;
       else {
         missingTuyens.add(tenTuyen);
-        rowWarns.push(`Tuyến "${tenTuyen}" chưa có — tạo ở tab Tuyến trước`);
+        rowWarns.push(`Tuyến "${tenTuyen}" chưa có - tạo ở tab Tuyến trước`);
       }
     }
 

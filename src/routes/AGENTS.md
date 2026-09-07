@@ -1,8 +1,8 @@
-# Routes — `src/routes/`
+# Routes - `src/routes/`
 
 Hono route modules mounted from `src/index.ts`. Auth required except login/logout in `auth.ts`.
 
-**Conventions:** follow `tuyen.ts`; use `layout` + `ui.ts` helpers — see root `AGENTS.md` and `DESIGN.md`.
+**Conventions:** follow `tuyen.ts`; use `layout` + `ui.ts` helpers - see root `AGENTS.md` and `DESIGN.md`.
 
 ## Files
 

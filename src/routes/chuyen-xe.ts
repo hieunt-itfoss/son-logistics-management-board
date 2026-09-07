@@ -190,6 +190,7 @@ chuyenXeRoutes.get('/', async (c) => {
       : badge('Chưa TT', 'warning');
     const mauClass = ch.tuyen_mau === 'blue' ? 'bg-lightprimary text-primary' : ch.tuyen_mau === 'green' ? 'bg-lightsuccess text-success' : ch.tuyen_mau === 'amber' ? 'bg-lightwarning text-warning' : 'bg-lightgray text-bodytext';
     return tableRow([
+      `<input type="checkbox" class="cx-check rounded border-bordergray" value="${esc(ch.id)}">`,
       `<a href="/chuyen-xe/${esc(ch.id)}" class="text-primary hover:underline font-semibold font-mono">${esc(ch.id)}</a>`,
       esc(ch.so_xe),
       esc(ch.bien_so),
@@ -255,9 +256,30 @@ chuyenXeRoutes.get('/', async (c) => {
       </div>
     </div>
 
+    <div id="cxBulkBar" class="hidden htql-bulkbar mb-4">
+      <label class="flex items-center gap-2 font-semibold mr-2 cursor-pointer">
+        <input type="checkbox" id="cxBulkBarChk" class="rounded border-success" checked>
+        <span id="cxBulkCount">0 chuyến đã chọn:</span>
+      </label>
+      <button type="button" onclick="cxBulkDaVe()" class="htql-bulk-btn">Đã về (set ngày về)</button>
+      <button type="button" onclick="cxBulkThanhToan()" class="htql-bulk-btn">Thanh toán cước</button>
+      <button type="button" onclick="cxBulkUng()" class="htql-bulk-btn">Ứng cước</button>
+      <button type="button" onclick="cxBulkDelete()" class="htql-bulk-btn htql-bulk-danger">Xóa chuyến</button>
+      <button type="button" onclick="cxClearSelection()" class="htql-bulk-btn ml-auto">Bỏ chọn tất cả</button>
+    </div>
+    <style>
+      .htql-bulkbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#e7f6ec;border:1px solid #b7e4c7;color:#1a7440;border-radius:8px;padding:8px 12px;font-size:13px}
+      .dark .htql-bulkbar{background:#10271b;border-color:#1f5135;color:#7ee2a8}
+      .htql-bulk-btn{border:1px solid #b7e4c7;color:#1a7440;background:#fff;border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer}
+      .htql-bulk-btn:hover{background:#d7f0e0}
+      .dark .htql-bulk-btn{background:#0d1f15;border-color:#1f5135;color:#7ee2a8}
+      .htql-bulk-danger{border-color:#f2b8b5;color:#c0392b}
+      .htql-bulk-danger:hover{background:#fde8e6}
+    </style>
+
     ${dataTable(
-      ['Mã chuyến', 'Số xe', 'Biển số', 'Tuyến', 'Cty VT', 'Tài xế', 'Ngày đi', 'Ngày về', 'Kiện', 'Giá chuyến', 'SENT/GT', 'TT cty VT', 'Trạng thái', ''],
-      rows || tableEmpty(14),
+      ['<input type="checkbox" id="cxSelectAll" class="rounded border-bordergray" title="Chọn tất cả">', 'Mã chuyến', 'Số xe', 'Biển số', 'Tuyến', 'Cty VT', 'Tài xế', 'Ngày đi', 'Ngày về', 'Kiện', 'Giá chuyến', 'SENT/GT', 'TT cty VT', 'Trạng thái', ''],
+      rows || tableEmpty(15),
       { align: 'center' },
     )}
     <div class="card mt-0 rounded-t-none border-t-0 -mt-6">
@@ -272,6 +294,101 @@ chuyenXeRoutes.get('/', async (c) => {
     document.getElementById('filterRange')?.addEventListener('change', function() {
       document.getElementById('customDateWrap')?.classList.toggle('hidden', this.value !== 'custom');
     });
+
+    function cxSelectedIds() {
+      return Array.from(document.querySelectorAll('.cx-check:checked')).map(function(cb) { return cb.value; });
+    }
+
+    function cxUpdateBulkBar() {
+      const ids = cxSelectedIds();
+      const bar = document.getElementById('cxBulkBar');
+      const cnt = document.getElementById('cxBulkCount');
+      if (!bar || !cnt) return;
+      if (ids.length) {
+        bar.classList.remove('hidden');
+        cnt.textContent = ids.length + ' chuyến đã chọn:';
+      } else {
+        bar.classList.add('hidden');
+      }
+      const sa = document.getElementById('cxSelectAll');
+      const all = document.querySelectorAll('.cx-check');
+      if (sa && all.length) sa.checked = ids.length === all.length;
+    }
+
+    document.getElementById('cxSelectAll')?.addEventListener('change', function() {
+      document.querySelectorAll('.cx-check').forEach(function(cb) { cb.checked = this.checked; }.bind(this));
+      cxUpdateBulkBar();
+    });
+
+    document.querySelectorAll('.cx-check').forEach(function(cb) {
+      cb.addEventListener('change', cxUpdateBulkBar);
+    });
+
+    document.getElementById('cxBulkBarChk')?.addEventListener('change', function() {
+      if (!this.checked) cxClearSelection();
+    });
+
+    window.cxClearSelection = function() {
+      document.querySelectorAll('.cx-check').forEach(function(cb) { cb.checked = false; });
+      const sa = document.getElementById('cxSelectAll');
+      if (sa) sa.checked = false;
+      cxUpdateBulkBar();
+    };
+
+    async function cxBulkPost(action, extra) {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      const payload = Object.assign({ action: action, ids: ids }, extra || {});
+      const res = await fetch('/chuyen-xe/api/chuyen-xe/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (action === 'delete' && data.skipped > 0) {
+          alert('Đã xóa ' + data.count + ' chuyến. Bỏ qua ' + data.skipped + ' chuyến còn phiếu hàng.');
+        }
+        location.reload();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Lỗi');
+      }
+    }
+
+    window.cxBulkDaVe = function() {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      const ngay = prompt('Ngày về cho ' + ids.length + ' chuyến (YYYY-MM-DD), để trống = hôm nay:', new Date().toISOString().slice(0, 10));
+      if (ngay === null) return;
+      cxBulkPost('da-ve', { ngay: ngay || undefined });
+    };
+
+    window.cxBulkThanhToan = function() {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      if (!confirm('Tạo phiếu chi thanh toán cước cho ' + ids.length + ' chuyến?')) return;
+      const ngay = prompt('Ngày phiếu chi (YYYY-MM-DD), để trống = hôm nay:', new Date().toISOString().slice(0, 10));
+      if (ngay === null) return;
+      cxBulkPost('thanh-toan', { ngay: ngay || undefined, hinhThuc: 'TM' });
+    };
+
+    window.cxBulkUng = function() {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      const soTien = prompt('Số tiền ứng cước cho mỗi chuyến (PLN/EUR theo chuyến):');
+      if (soTien === null || !soTien.trim()) return;
+      const ngay = prompt('Ngày phiếu chi (YYYY-MM-DD), để trống = hôm nay:', new Date().toISOString().slice(0, 10));
+      if (ngay === null) return;
+      cxBulkPost('ung', { soTien: Number(soTien), ngay: ngay || undefined, hinhThuc: 'TM' });
+    };
+
+    window.cxBulkDelete = function() {
+      const ids = cxSelectedIds();
+      if (!ids.length) return;
+      if (!confirm('Xóa ' + ids.length + ' chuyến? Chuyến còn phiếu hàng sẽ bị bỏ qua.')) return;
+      cxBulkPost('delete');
+    };
     </script>
   `;
   return c.html(layout('Chuy\u1ebfn xe', content, user, 'chuyen-xe'));

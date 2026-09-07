@@ -53,12 +53,12 @@ function esc(s: string): string {
 }
 
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return '—';
+  if (!d) return '-';
   return d.slice(0, 10);
 }
 
 function fmtNum(n: number | null | undefined): string {
-  if (n == null || n === 0) return '—';
+  if (n == null || n === 0) return '-';
   return n.toLocaleString('vi-VN');
 }
 
@@ -224,14 +224,14 @@ tuyenRoutes.post('/api/tuyen/:id/delete', async (c) => {
   ).bind(id).all<{ id: string }>();
 
   if (refs.length > 0) {
-    return c.json({ error: 'Không thể xóa — tuyến vẫn còn chuyến xe' }, 400);
+    return c.json({ error: 'Không thể xóa - tuyến vẫn còn chuyến xe' }, 400);
   }
 
   await c.env.DB.prepare('DELETE FROM tuyen WHERE id=?').bind(id).run();
   return c.json({ success: true });
 });
 
-// ── GET / — List all tuyen ──────────────────────────────────────────
+// ── GET / - List all tuyen ──────────────────────────────────────────
 
 tuyenRoutes.get('/', async (c) => {
   const user = c.get('user');
@@ -463,7 +463,7 @@ tuyenRoutes.get('/', async (c) => {
   return c.html(layout('Tuyến vận tải', content, user, 'tuyen'));
 });
 
-// ── GET /:id — Detail view ──────────────────────────────────────────
+// ── GET /:id - Detail view ──────────────────────────────────────────
 
 tuyenRoutes.get('/:id', async (c) => {
   const user = c.get('user');
@@ -503,7 +503,7 @@ tuyenRoutes.get('/:id', async (c) => {
     return `
       <tr class="hover:bg-gray-50 border-b border-gray-100">
         <td class="px-4 py-3 text-sm"><a href="/chuyen-xe" class="text-blue-600 hover:underline font-mono text-xs">${ch.id.slice(0, 8)}</a></td>
-        <td class="px-4 py-3 text-sm text-gray-700">${ch.bien_so || ch.so_xe || '—'}</td>
+        <td class="px-4 py-3 text-sm text-gray-700">${ch.bien_so || ch.so_xe || '-'}</td>
         <td class="px-4 py-3 text-sm text-gray-500">${fmtDate(ch.ngay_di)}</td>
         <td class="px-4 py-3 text-sm text-gray-500">${fmtDate(ch.ngay_den)}</td>
         <td class="px-4 py-3 text-sm text-right tabular-nums">${loC}</td>

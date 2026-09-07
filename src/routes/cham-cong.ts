@@ -9,7 +9,7 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return '—';
+  if (!d) return '-';
   return d.slice(0, 10);
 }
 
@@ -41,7 +41,7 @@ chamCongRoutes.get('/', async (c) => {
       fmtDate(r.ngay),
       `<span class="font-medium text-dark dark:text-white">${esc(r.nhan_vien_ten)}</span>`,
       `<span class="inline-block px-2.5 py-1 rounded-md text-xs font-medium ${color}">${TT_LABEL[r.trang_thai] || r.trang_thai}</span>`,
-      esc(r.ghi_chu || '—'),
+      esc(r.ghi_chu || '-'),
     ], { align: 'center' });
   }).join('');
 

@@ -162,7 +162,7 @@ function subTabPills(sub: string, khCount: number, hangCount: number, ctyCount: 
   </div>`;
 }
 
-// ── GET / — Main page with 3 sub-tabs ──────────────────────────
+// ── GET / - Main page with 3 sub-tabs ──────────────────────────
 
 doiTacRoutes.get('/', async (c) => {
   const user = c.get('user');
@@ -1078,7 +1078,7 @@ async function renderCtyList(db: D1Database, search: string, page: number, per: 
     </script>`;
 }
 
-// ── GET /khach-hang/:id — KH Detail ─────────────────────────────
+// ── GET /khach-hang/:id - KH Detail ─────────────────────────────
 
 doiTacRoutes.get('/khach-hang/:id', async (c) => {
   const user = c.get('user');
@@ -1165,7 +1165,7 @@ doiTacRoutes.get('/khach-hang/:id', async (c) => {
           </div>
         </div>
         <div class="flex gap-2">
-          <button onclick="openKhModal('${kh.id}')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm cursor-pointer">✏ Sửa</button>
+          <button onclick="openKhModal('${kh.id}')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm cursor-pointer">Sửa</button>
         </div>
       </div>
     </div>
@@ -1292,10 +1292,10 @@ doiTacRoutes.get('/khach-hang/:id', async (c) => {
     </div>` : ''}
   `;
 
-  return c.html(layout(`Đối tác — ${kh.ten}`, content, user, 'doi-tac'));
+  return c.html(layout(`Đối tác - ${kh.ten}`, content, user, 'doi-tac'));
 });
 
-// ── GET /hang/:id — Supplier detail ─────────────────────────────────
+// ── GET /hang/:id - Supplier detail ─────────────────────────────────
 
 doiTacRoutes.get('/hang/:id', async (c) => {
   const user = c.get('user');
@@ -1340,7 +1340,7 @@ doiTacRoutes.get('/hang/:id', async (c) => {
           <h1 class="text-2xl font-bold">🏭 ${esc(String(h.ten || ''))}</h1>
           <p class="text-amber-100 mt-1 text-sm">${esc(String(h.id))} · 🌍 ${esc(String(h.nuoc || ''))} · ${esc(String(h.dia_chi || ''))}</p>
         </div>
-        <button onclick="openHangModal('${String(h.id)}')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm cursor-pointer">✏ Sửa</button>
+        <button onclick="openHangModal('${String(h.id)}')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm cursor-pointer">Sửa</button>
       </div>
     </div>
 
@@ -1391,10 +1391,10 @@ doiTacRoutes.get('/hang/:id', async (c) => {
     </div>
   `;
 
-  return c.html(layout(`Đối tác — ${String(h.ten)}`, content, user, 'doi-tac'));
+  return c.html(layout(`Đối tác - ${String(h.ten)}`, content, user, 'doi-tac'));
 });
 
-// ── GET /cty-vt/:id — Cty VT Detail ─────────────────────────────
+// ── GET /cty-vt/:id - Cty VT Detail ─────────────────────────────
 
 doiTacRoutes.get('/cty-vt/:id', async (c) => {
   const user = c.get('user');
@@ -1459,7 +1459,7 @@ doiTacRoutes.get('/cty-vt/:id', async (c) => {
           <p class="text-cyan-100 mt-1 text-sm">${esc(String(cty.id))}${String(cty.nip || '') ? ` · NIP: ${esc(String(cty.nip))}` : ''}${String(cty.dia_chi || '') ? ` · ${esc(String(cty.dia_chi))}` : ''}${String(cty.sdt || '') ? ` · ${esc(String(cty.sdt))}` : ''}${String(cty.email || '') ? ` · ${esc(String(cty.email))}` : ''}</p>
           ${String(cty.ghi_chu || '') ? `<p class="text-cyan-200 text-xs mt-2">📝 ${esc(String(cty.ghi_chu))}</p>` : ''}
         </div>
-        <button onclick="openCtyModal('${String(cty.id)}')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm cursor-pointer">✏ Sửa</button>
+        <button onclick="openCtyModal('${String(cty.id)}')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm cursor-pointer">Sửa</button>
       </div>
     </div>
 
@@ -1541,10 +1541,10 @@ doiTacRoutes.get('/cty-vt/:id', async (c) => {
     </div>
   `;
 
-  return c.html(layout(`Đối tác — ${String(cty.ten)}`, content, user, 'doi-tac'));
+  return c.html(layout(`Đối tác - ${String(cty.ten)}`, content, user, 'doi-tac'));
 });
 
-// ── GET /api/khach-hang/:id — KH JSON (for modal populate) ──────
+// ── GET /api/khach-hang/:id - KH JSON (for modal populate) ──────
 
 doiTacRoutes.get('/api/khach-hang/:id', async (c) => {
   const id = c.req.param('id');
@@ -1553,7 +1553,7 @@ doiTacRoutes.get('/api/khach-hang/:id', async (c) => {
   return c.json(kh);
 });
 
-// ── GET /api/hang/:id — Supplier JSON ───────────────────────────────
+// ── GET /api/hang/:id - Supplier JSON ───────────────────────────────
 
 doiTacRoutes.get('/api/hang/:id', async (c) => {
   const id = c.req.param('id');
@@ -1562,7 +1562,7 @@ doiTacRoutes.get('/api/hang/:id', async (c) => {
   return c.json(h);
 });
 
-// ── GET /api/cty-vt/:id — Cty VT JSON ───────────────────────────
+// ── GET /api/cty-vt/:id - Cty VT JSON ───────────────────────────
 
 doiTacRoutes.get('/api/cty-vt/:id', async (c) => {
   const id = c.req.param('id');
@@ -1571,7 +1571,7 @@ doiTacRoutes.get('/api/cty-vt/:id', async (c) => {
   return c.json(ct);
 });
 
-// ── POST /api/khach-hang — Create/Update KH ─────────────────────
+// ── POST /api/khach-hang - Create/Update KH ─────────────────────
 
 doiTacRoutes.post('/api/khach-hang', async (c) => {
   const body = await c.req.parseBody();
@@ -1605,7 +1605,7 @@ doiTacRoutes.post('/api/khach-hang', async (c) => {
   return c.redirect('/doi-tac?sub=khach');
 });
 
-// ── POST /api/hang — Create/Update supplier ─────────────────────────
+// ── POST /api/hang - Create/Update supplier ─────────────────────────
 
 doiTacRoutes.post('/api/hang', async (c) => {
   const body = await c.req.parseBody();
@@ -1631,7 +1631,7 @@ doiTacRoutes.post('/api/hang', async (c) => {
   return c.redirect('/doi-tac?sub=hang');
 });
 
-// ── POST /api/cty-vt — Create/Update Cty VT ─────────────────────
+// ── POST /api/cty-vt - Create/Update Cty VT ─────────────────────
 
 doiTacRoutes.post('/api/cty-vt', async (c) => {
   const body = await c.req.parseBody();

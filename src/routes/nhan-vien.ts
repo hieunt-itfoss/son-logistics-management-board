@@ -93,8 +93,8 @@ nhanVienRoutes.get('/', async (c) => {
       `<span class="font-mono text-bodytext">${nv.id}</span>`,
       `<span class="font-medium text-dark dark:text-white">${escapeHtml(nv.ten)}</span>`,
       roleTag(nv.vai_tro as VaiTro),
-      escapeHtml(nv.sdt || '—'),
-      escapeHtml(nv.dia_chi || '—'),
+      escapeHtml(nv.sdt || '-'),
+      escapeHtml(nv.dia_chi || '-'),
       ...(canEdit ? [actions] : []),
     ], { align: 'center' });
   }).join('');
